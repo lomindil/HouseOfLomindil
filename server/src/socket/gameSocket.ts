@@ -58,6 +58,76 @@ export function setupGameSocket(io: Server) {
     // Chat message
     socket.on('chat_message', ({ content, type = 'chat', metadata = {} }: any) => {
       if (!socket.gameId) return;
+
+      // DM-only slash commands
+      if (socket.isDM && typeof content === 'string') {
+        const hitMatch = content.match(/^\/hit\s+(\S+)\s+(\d+)$/i);
+        const healMatch = content.match(/^\/heal\s+(\S+)\s+(\d+)$/i);
+        const match = hitMatch || healMatch;
+        if (match) {
+          const isHit = !!hitMatch;
+          const targetUsername = match[1];
+          const amount = parseInt(match[2], 10);
+
+          // Find the player in this game by username
+          const playerRow = db.prepare(`
+            SELECT gp.user_id, gp.character_id, c.sheet_data
+            FROM game_players gp
+            JOIN users u ON u.id = gp.user_id
+            LEFT JOIN characters c ON c.id = gp.character_id
+            WHERE gp.game_id = ? AND LOWER(u.username) = LOWER(?)
+          `).get(socket.gameId, targetUsername) as any;
+
+          if (!playerRow || !playerRow.character_id) {
+            socket.emit('chat_message', {
+              id: uuidv4(), game_id: socket.gameId, user_id: null,
+              username: 'System', type: 'system',
+              content: `No character found for player "${targetUsername}".`,
+              metadata: {}, created_at: Math.floor(Date.now() / 1000),
+            });
+            return;
+          }
+
+          const sheet = JSON.parse(playerRow.sheet_data || '{}');
+          const combat = sheet.combat || {};
+          const maxHp: number = combat.max_hp ?? 10;
+          let currentHp: number = combat.current_hp ?? maxHp;
+
+          if (isHit) {
+            currentHp = Math.max(0, currentHp - amount);
+          } else {
+            currentHp = Math.min(maxHp, currentHp + amount);
+          }
+
+          sheet.combat = { ...combat, current_hp: currentHp };
+          db.prepare('UPDATE characters SET sheet_data = ?, updated_at = unixepoch() WHERE id = ?')
+            .run(JSON.stringify(sheet), playerRow.character_id);
+
+          const verb = isHit ? `hits ${targetUsername} for ${amount} damage` : `heals ${targetUsername} for ${amount} HP`;
+          const hpLine = `HP: ${currentHp}/${maxHp}`;
+          const systemContent = `⚔️ DM ${verb}! (${hpLine})`;
+
+          const sysId = uuidv4();
+          const ts = Math.floor(Date.now() / 1000);
+          db.prepare('INSERT INTO chat_messages (id, game_id, user_id, username, type, content, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+            sysId, socket.gameId, null, 'System', 'system', systemContent, '{}', ts
+          );
+          io.to(`game:${socket.gameId}`).emit('chat_message', {
+            id: sysId, game_id: socket.gameId, user_id: null,
+            username: 'System', type: 'system', content: systemContent, metadata: {}, created_at: ts,
+          });
+
+          // Notify the affected player's client to refresh their character
+          io.to(`game:${socket.gameId}`).emit('character_hp_update', {
+            userId: playerRow.user_id,
+            characterId: playerRow.character_id,
+            current_hp: currentHp,
+            max_hp: maxHp,
+          });
+          return;
+        }
+      }
+
       const id = uuidv4();
       const ts = Math.floor(Date.now() / 1000);
 

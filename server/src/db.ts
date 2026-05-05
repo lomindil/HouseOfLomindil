@@ -90,7 +90,11 @@ db.exec(`
   );
 `);
 
-// Wrapper to mimic better-sqlite3's API for our code
+// Migration: add game_id column to characters if missing
+try {
+  db.exec(`ALTER TABLE characters ADD COLUMN game_id TEXT REFERENCES games(id) ON DELETE CASCADE`);
+} catch { /* column already exists */ }
+
 export const stmt = (sql: string) => db.prepare(sql);
 
 export default db;

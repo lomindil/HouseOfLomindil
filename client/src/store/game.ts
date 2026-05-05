@@ -65,12 +65,18 @@ export interface Game {
   is_dm: boolean;
 }
 
+export interface HpOverride {
+  current_hp: number;
+  max_hp: number;
+}
+
 interface GameStore {
   game: Game | null;
   currentMap: MapData | null;
   messages: ChatMessage[];
   onlinePlayers: Set<string>;
   socket: Socket | null;
+  hpOverrides: Record<string, HpOverride>; // characterId → live HP
 
   setGame: (game: Game) => void;
   setMap: (map: MapData) => void;
@@ -83,6 +89,7 @@ interface GameStore {
   updateDrawings: (mapId: string, drawings: Drawing[]) => void;
   updateFog: (mapId: string, fogData: Record<string, boolean>) => void;
   setPlayerOnline: (userId: string, online: boolean) => void;
+  setHpOverride: (characterId: string, hp: HpOverride) => void;
   reset: () => void;
 }
 
@@ -92,6 +99,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   messages: [],
   onlinePlayers: new Set(),
   socket: null,
+  hpOverrides: {},
 
   setGame: (game) => set({ game }),
   setMap: (map) => set({ currentMap: map }),
@@ -133,5 +141,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return { onlinePlayers: next };
   }),
 
-  reset: () => set({ game: null, currentMap: null, messages: [], onlinePlayers: new Set(), socket: null }),
+  setHpOverride: (characterId, hp) => set((s) => ({
+    hpOverrides: { ...s.hpOverrides, [characterId]: hp },
+  })),
+
+  reset: () => set({ game: null, currentMap: null, messages: [], onlinePlayers: new Set(), socket: null, hpOverrides: {} }),
 }));

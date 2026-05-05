@@ -7,11 +7,14 @@ import api from '../lib/api';
 // This avoids all Vite ESM pre-bundling issues with socket.io-client.
 declare const io: (url: string, opts?: Record<string, unknown>) => any;
 
-const SOCKET_URL = 'http://localhost:3001';
+// Always connect to the same origin as the page.
+// In dev, Vite proxies /socket.io → localhost:3001.
+// In prod, Express serves /socket.io directly.
+const SOCKET_URL = window.location.origin;
 
 export function useGameSocket(gameId: string) {
   const { token } = useAuthStore();
-  const { setSocket, addMessage, updateToken, addToken, removeToken, updateDrawings, updateFog, setPlayerOnline, setMap } = useGameStore();
+  const { setSocket, addMessage, updateToken, addToken, removeToken, updateDrawings, updateFog, setPlayerOnline, setMap, setHpOverride } = useGameStore();
   const socketRef = useRef<any>(null);
 
   useEffect(() => {
@@ -65,6 +68,10 @@ export function useGameSocket(gameId: string) {
 
     socket.on('player_joined', (data: any) => setPlayerOnline(data.userId, true));
     socket.on('player_left', (data: any) => setPlayerOnline(data.userId, false));
+
+    socket.on('character_hp_update', ({ characterId, current_hp, max_hp }: any) => {
+      setHpOverride(characterId, { current_hp, max_hp });
+    });
 
     return () => {
       socket.disconnect();

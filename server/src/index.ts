@@ -41,6 +41,15 @@ app.use('/api/games/:gameId', chatRouter);
 
 setupGameSocket(io);
 
+// Serve built frontend in production
+if (process.env.NODE_ENV === 'production') {
+  const publicDir = path.join(__dirname, '../public');
+  app.use(express.static(publicDir));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(publicDir, 'index.html'));
+  });
+}
+
 const PORT = parseInt(process.env.PORT || '3001');
 httpServer.listen(PORT, () => {
   console.log(`Tavern VTT server running on http://localhost:${PORT}`);

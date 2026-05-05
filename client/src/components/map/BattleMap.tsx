@@ -25,7 +25,7 @@ function TokenShape({ token, isDraggable, onDragEnd }: {
       draggable={isDraggable}
       onDragEnd={(e) => onDragEnd(token.id, e.target.x(), e.target.y())}
     >
-      <Circle radius={token.size / 2} fill={token.color} opacity={0.9} />
+      <Circle radius={token.size / 2} fill={token.color} stroke="white" strokeWidth={2} opacity={0.95} />
       {img && <KImage image={img} x={-token.size / 2} y={-token.size / 2} width={token.size} height={token.size} cornerRadius={token.size / 2} />}
       <Text text={token.label} x={-token.size / 2} y={token.size / 2 + 2} width={token.size} align="center" fontSize={10} fill="#fff" />
     </Group>
@@ -52,7 +52,7 @@ function FogLayer({ fogData, gridSize, width, height, isDM }: {
           <Rect
             key={key} x={col * gridSize} y={row * gridSize}
             width={gridSize} height={gridSize}
-            fill={isDM ? 'rgba(0,0,0,0.6)' : 'black'}
+            fill={isDM ? 'rgba(0,0,0,0.82)' : 'black'}
           />
         );
       }
@@ -211,8 +211,8 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
       label: tokenLabel.trim(),
       color: tokenColor,
       userId: tokenUserId || undefined,
-      x: stageSize.w / 2 / scale,
-      y: stageSize.h / 2 / scale,
+      x: (stageSize.w / 2 - offset.x) / scale,
+      y: (stageSize.h / 2 - offset.y) / scale,
       size: map.grid_size * 0.8,
     };
     socket?.emit('token_add', { mapId: map.id, token });
@@ -286,7 +286,7 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
               )}
             >{icon}</button>
           ))}
-          <button onClick={() => setShowAddToken(!showAddToken)} title="Add Token"
+          <button onClick={() => { setShowAddToken(!showAddToken); setTool('select'); }} title="Add Token"
             className="p-1.5 rounded border border-tavern-border text-tavern-muted hover:text-tavern-text text-xs transition-colors">
             <Plus size={14} />
           </button>

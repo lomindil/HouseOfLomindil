@@ -4,7 +4,8 @@ import toast from 'react-hot-toast';
 import Navbar from '../components/ui/Navbar';
 import api from '../lib/api';
 import { useAuthStore } from '../store/auth';
-import { Play, Copy, Users, Map, Plus, Trash2, AlertTriangle, Upload } from 'lucide-react';
+import { Play, Copy, Users, Map, Plus, Trash2, Upload, BookOpen, Hammer } from 'lucide-react';
+import MapBuilderModal from '../components/map/MapBuilderModal';
 
 interface Game {
   id: string;
@@ -34,14 +35,25 @@ export default function GameLobbyPage() {
   const [uploadingMap, setUploadingMap] = useState(false);
   const [characters, setCharacters] = useState<any[]>([]);
   const [selectedChar, setSelectedChar] = useState('');
+  const [gameCharacters, setGameCharacters] = useState<any[]>([]);
+  const [showGCForm, setShowGCForm] = useState(false);
+  const [gcName, setGcName] = useState('');
+  const [gcRace, setGcRace] = useState('');
+  const [gcClass, setGcClass] = useState('');
+  const [gcHp, setGcHp] = useState(10);
+  const [gcAc, setGcAc] = useState(10);
+  const [savingGC, setSavingGC] = useState(false);
+  const [showMapBuilder, setShowMapBuilder] = useState(false);
 
   useEffect(() => {
     Promise.all([
       api.get(`/games/${id}`),
       api.get('/characters'),
-    ]).then(([gameRes, charRes]) => {
+      api.get(`/games/${id}/game-characters`),
+    ]).then(([gameRes, charRes, gcRes]) => {
       setGame(gameRes.data);
       setCharacters(charRes.data);
+      setGameCharacters(gcRes.data);
       const existingPlayer = gameRes.data.players.find((p: any) => p.id === user?.id);
       if (existingPlayer?.character_id) setSelectedChar(existingPlayer.character_id);
     }).finally(() => setLoading(false));
@@ -99,6 +111,59 @@ export default function GameLobbyPage() {
     toast.success('Character selected');
   }
 
+  async function claimGameCharacter(gcId: string) {
+    try {
+      const { data } = await api.post(`/games/${id}/game-characters/${gcId}/claim`);
+      setSelectedChar(data.id);
+      setCharacters((prev) => [...prev.filter((c) => c.name !== data.name), data]);
+      toast.success(`${data.name} claimed and added to your characters!`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Could not claim character');
+    }
+  }
+
+  async function createGameCharacter(e: React.FormEvent) {
+    e.preventDefault();
+    if (!gcName.trim()) return;
+    setSavingGC(true);
+    try {
+      const sheet_data = {
+        race: gcRace, class: gcClass, level: 1,
+        combat: { max_hp: gcHp, current_hp: gcHp, temp_hp: 0, ac: gcAc, speed: 30, initiative: 0, hit_dice: '1d8', death_saves: { successes: 0, failures: 0 } },
+        abilities: { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 },
+        skills: {}, saving_throws: {}, features: [], equipment: [], spells: {}, notes: '', backstory: '',
+      };
+      const { data } = await api.post(`/games/${id}/game-characters`, { name: gcName.trim(), sheet_data });
+      setGameCharacters((prev) => [...prev, data]);
+      setShowGCForm(false);
+      setGcName(''); setGcRace(''); setGcClass(''); setGcHp(10); setGcAc(10);
+      toast.success('Game character created!');
+    } finally {
+      setSavingGC(false);
+    }
+  }
+
+  async function saveBuiltMap(blob: Blob, name: string, gridSize: number) {
+    const fd = new FormData();
+    fd.append('image', blob, `${name.replace(/\s+/g, '-')}.png`);
+    fd.append('name', name);
+    fd.append('grid_size', gridSize.toString());
+    try {
+      const { data } = await api.post(`/games/${id}/maps`, fd);
+      toast.success(`Map "${name}" added!`);
+      setGame((g) => g ? { ...g, maps: [...g.maps, data] } : g);
+      setShowMapBuilder(false);
+    } catch {
+      toast.error('Failed to save map');
+    }
+  }
+
+  async function deleteGameCharacter(gcId: string) {
+    await api.delete(`/games/${id}/game-characters/${gcId}`);
+    setGameCharacters((prev) => prev.filter((c) => c.id !== gcId));
+    toast.success('Character removed');
+  }
+
   function copyJoinLink() {
     const url = `${window.location.origin}/join/${game!.join_code}`;
     navigator.clipboard.writeText(url);
@@ -121,6 +186,7 @@ export default function GameLobbyPage() {
   </div>;
 
   return (
+    <>
     <div className="min-h-screen">
       <Navbar />
       <main className="max-w-4xl mx-auto px-4 py-8">
@@ -204,8 +270,31 @@ export default function GameLobbyPage() {
 
           {/* Character selection for players */}
           {!game.is_dm && (
-            <div className="tavern-card p-4">
+            <div className="tavern-card p-4 md:col-span-2">
               <h2 className="font-serif text-tavern-gold mb-3 text-sm uppercase tracking-widest">Your Character</h2>
+
+              {/* Pre-built game characters */}
+              {gameCharacters.length > 0 && (
+                <div className="mb-3">
+                  <p className="label mb-2">Pre-built by DM — claim one to play:</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+                    {gameCharacters.map((gc) => (
+                      <button
+                        key={gc.id}
+                        onClick={() => claimGameCharacter(gc.id)}
+                        className="border border-tavern-border rounded p-2 text-left hover:border-tavern-gold transition-colors"
+                      >
+                        <div className="text-sm font-serif text-tavern-text">{gc.name}</div>
+                        <div className="text-xs text-tavern-muted">{gc.sheet_data?.race} {gc.sheet_data?.class}</div>
+                        <div className="text-xs text-tavern-muted">HP {gc.sheet_data?.combat?.max_hp} · AC {gc.sheet_data?.combat?.ac}</div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="border-t border-tavern-border my-3" />
+                </div>
+              )}
+
+              <p className="label mb-2">Your characters:</p>
               {characters.length === 0 ? (
                 <div>
                   <p className="text-tavern-muted text-sm mb-2">No characters yet</p>
@@ -225,6 +314,66 @@ export default function GameLobbyPage() {
             </div>
           )}
 
+          {/* Pre-built characters management (DM) */}
+          {game.is_dm && (
+            <div className="tavern-card p-4 md:col-span-2">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <BookOpen size={16} className="text-tavern-gold" />
+                  <h2 className="font-serif text-tavern-gold text-sm uppercase tracking-widest">Pre-built Characters</h2>
+                </div>
+                <button onClick={() => setShowGCForm(!showGCForm)} className="text-tavern-gold hover:text-tavern-text transition-colors">
+                  <Plus size={16} />
+                </button>
+              </div>
+              <p className="text-xs text-tavern-muted mb-3">Create characters players can pick when joining.</p>
+
+              {showGCForm && (
+                <form onSubmit={createGameCharacter} className="mb-3 p-3 bg-tavern-bg rounded border border-tavern-border space-y-2">
+                  <input className="tavern-input text-sm py-1.5" placeholder="Character name *" value={gcName} onChange={(e) => setGcName(e.target.value)} required />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input className="tavern-input text-sm py-1.5" placeholder="Race (e.g. Elf)" value={gcRace} onChange={(e) => setGcRace(e.target.value)} />
+                    <input className="tavern-input text-sm py-1.5" placeholder="Class (e.g. Rogue)" value={gcClass} onChange={(e) => setGcClass(e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="label text-xs">Max HP</label>
+                      <input type="number" min={1} max={999} className="tavern-input text-sm py-1.5 mt-1" value={gcHp} onChange={(e) => setGcHp(parseInt(e.target.value) || 10)} />
+                    </div>
+                    <div>
+                      <label className="label text-xs">AC</label>
+                      <input type="number" min={1} max={30} className="tavern-input text-sm py-1.5 mt-1" value={gcAc} onChange={(e) => setGcAc(parseInt(e.target.value) || 10)} />
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="submit" disabled={savingGC} className="btn-primary text-xs py-1 px-3">{savingGC ? 'Saving...' : 'Create'}</button>
+                    <button type="button" onClick={() => setShowGCForm(false)} className="btn-secondary text-xs py-1 px-3">Cancel</button>
+                  </div>
+                </form>
+              )}
+
+              {gameCharacters.length === 0 ? (
+                <p className="text-tavern-muted text-sm">No pre-built characters yet.</p>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {gameCharacters.map((gc) => (
+                    <div key={gc.id} className="border border-tavern-border rounded p-2 relative group">
+                      <div className="text-sm font-serif text-tavern-text">{gc.name}</div>
+                      <div className="text-xs text-tavern-muted">{gc.sheet_data?.race} {gc.sheet_data?.class}</div>
+                      <div className="text-xs text-tavern-muted">HP {gc.sheet_data?.combat?.max_hp} · AC {gc.sheet_data?.combat?.ac}</div>
+                      <button
+                        onClick={() => deleteGameCharacter(gc.id)}
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-tavern-muted hover:text-red-400 transition-all"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Maps (DM only) */}
           {game.is_dm && (
             <div className="tavern-card p-4">
@@ -233,9 +382,14 @@ export default function GameLobbyPage() {
                   <Map size={16} className="text-tavern-gold" />
                   <h2 className="font-serif text-tavern-gold text-sm uppercase tracking-widest">Battle Maps</h2>
                 </div>
-                <button onClick={() => setShowMapForm(!showMapForm)} className="text-tavern-gold hover:text-tavern-gold-light transition-colors">
-                  <Plus size={16} />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => setShowMapBuilder(true)} title="Map Builder" className="text-tavern-muted hover:text-tavern-gold transition-colors">
+                    <Hammer size={14} />
+                  </button>
+                  <button onClick={() => setShowMapForm(!showMapForm)} className="text-tavern-gold hover:text-tavern-gold-light transition-colors">
+                    <Plus size={16} />
+                  </button>
+                </div>
               </div>
 
               {showMapForm && (
@@ -275,5 +429,10 @@ export default function GameLobbyPage() {
         </div>
       </main>
     </div>
+
+    {showMapBuilder && (
+      <MapBuilderModal onClose={() => setShowMapBuilder(false)} onSave={saveBuiltMap} />
+    )}
+    </>
   );
 }

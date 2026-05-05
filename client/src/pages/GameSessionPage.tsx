@@ -9,6 +9,7 @@ import BattleMap from '../components/map/BattleMap';
 import ChatPanel from '../components/chat/ChatPanel';
 import DiceRoller from '../components/dice/DiceRoller';
 import HandoutsPanel from '../components/game/HandoutsPanel';
+import PartyPanel from '../components/game/PartyPanel';
 import { Dices, MessageSquare, Map, Users, FileText, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -160,27 +161,8 @@ export default function GameSessionPage() {
               {tab === 'dice' && <div className="p-3 overflow-y-auto h-full"><DiceRoller /></div>}
               {tab === 'handouts' && <div className="h-full"><HandoutsPanel isDM={isDM} /></div>}
               {tab === 'players' && (
-                <div className="p-3 space-y-2 overflow-y-auto">
-                  <h3 className="label mb-2">Party Members</h3>
-                  {/* DM */}
-                  <div className="flex items-center gap-2 p-1.5 rounded">
-                    <div className="w-7 h-7 rounded-full bg-tavern-gold/20 border border-tavern-gold/50 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs text-tavern-gold font-serif">DM</span>
-                    </div>
-                    <span className="text-sm text-tavern-text">{game?.dm_username}</span>
-                  </div>
-                  {/* Players */}
-                  {game?.players.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 p-1.5 rounded">
-                      <div className="w-7 h-7 rounded-full bg-tavern-bg border border-tavern-border overflow-hidden flex-shrink-0 flex items-center justify-center">
-                        {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" /> : <span className="text-xs">👤</span>}
-                      </div>
-                      <div>
-                        <div className="text-sm text-tavern-text">{p.username}</div>
-                        {p.char_name && <div className="text-xs text-tavern-muted">{p.char_name}</div>}
-                      </div>
-                    </div>
-                  ))}
+                <div className="h-full overflow-hidden">
+                  <PartyPanel gameId={id!} isDM={isDM} />
                 </div>
               )}
             </div>
