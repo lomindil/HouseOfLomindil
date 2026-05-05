@@ -39,6 +39,19 @@ router.post('/', (req: AuthRequest, res: Response) => {
   res.json(game);
 });
 
+// Public listing of active games (no join_code exposed)
+router.get('/discover', (_req: AuthRequest, res: Response) => {
+  const games = db.prepare(`
+    SELECT g.id, g.name, g.description, g.status, u.username as dm_username,
+           (SELECT COUNT(*) FROM game_players WHERE game_id = g.id) as player_count
+    FROM games g
+    JOIN users u ON u.id = g.dm_id
+    WHERE g.status = 'active'
+    ORDER BY g.created_at DESC
+  `).all();
+  res.json(games);
+});
+
 router.get('/active', (_req: AuthRequest, res: Response) => {
   const active = db.prepare("SELECT * FROM games WHERE status = 'active'").all();
   res.json({ active: (active as any[]).length > 0, games: active });
@@ -67,7 +80,7 @@ router.post('/join', (req: AuthRequest, res: Response) => {
   const game = db.prepare('SELECT * FROM games WHERE join_code = ?').get(code.toUpperCase()) as any;
   if (!game) return res.status(404).json({ error: 'Game not found' });
   if (game.status === 'ended') return res.status(400).json({ error: 'Game has ended' });
-  if (game.dm_id === req.user!.id) return res.status(400).json({ error: 'You are the DM of this game' });
+  if (game.dm_id === req.user!.id) return res.status(400).json({ error: 'DM cannot join as a player' });
 
   if (character_id) {
     const char = db.prepare('SELECT * FROM characters WHERE id = ? AND user_id = ?').get(character_id, req.user!.id);
@@ -148,6 +161,17 @@ router.post('/:id/game-characters', (req: AuthRequest, res: Response) => {
     id, req.user!.id, req.params.id, name, JSON.stringify(sheet_data || {})
   );
   const char = db.prepare('SELECT * FROM characters WHERE id = ?').get(id) as any;
+  res.json({ ...char, sheet_data: JSON.parse(char.sheet_data) });
+});
+
+router.put('/:id/game-characters/:charId', (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT * FROM games WHERE id = ? AND dm_id = ?').get(req.params.id, req.user!.id) as any;
+  if (!game) return res.status(403).json({ error: 'DM only' });
+  const { name, sheet_data } = req.body;
+  db.prepare('UPDATE characters SET name = ?, sheet_data = ? WHERE id = ? AND game_id = ?').run(
+    name, JSON.stringify(sheet_data || {}), req.params.charId, req.params.id
+  );
+  const char = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.charId) as any;
   res.json({ ...char, sheet_data: JSON.parse(char.sheet_data) });
 });
 

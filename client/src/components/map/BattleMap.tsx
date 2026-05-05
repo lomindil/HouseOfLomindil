@@ -6,7 +6,8 @@ import { useGameStore } from '../../store/game';
 import type { Token, Drawing, MapData } from '../../store/game';
 import { useAuthStore } from '../../store/auth';
 import clsx from 'clsx';
-import { Move, Pen, Square, Minus, Eye, EyeOff, Eraser, ZoomIn, ZoomOut, RotateCcw, Circle as CircleIcon, Plus, Trash2 } from 'lucide-react';
+import { Move, Pen, Square, Minus, Eye, EyeOff, Eraser, ZoomIn, ZoomOut, RotateCcw, Circle as CircleIcon, Plus, Trash2, ImagePlus } from 'lucide-react';
+import api from '../../lib/api';
 
 type Tool = 'select' | 'pen' | 'line' | 'rect' | 'circle' | 'fog' | 'fog-erase' | 'token-add';
 
@@ -67,7 +68,7 @@ interface BattleMapProps {
 }
 
 export default function BattleMap({ map, isDM }: BattleMapProps) {
-  const { socket, updateToken: storeUpdateToken, addToken: storeAddToken, removeToken: storeRemoveToken,
+  const { game, socket, updateToken: storeUpdateToken, addToken: storeAddToken, removeToken: storeRemoveToken,
     updateDrawings: storeUpdateDrawings, updateFog: storeUpdateFog } = useGameStore();
   const { user } = useAuthStore();
   const [mapImg] = useImage(map.image_url);
@@ -84,6 +85,9 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
   const [tokenLabel, setTokenLabel] = useState('');
   const [tokenColor, setTokenColor] = useState('#4488ff');
   const [tokenUserId, setTokenUserId] = useState('');
+  const [tokenAvatarUrl, setTokenAvatarUrl] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ w: 800, h: 600 });
@@ -205,12 +209,35 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
     return isDM || token.userId === user?.id;
   }
 
+  async function uploadTokenAvatar(file: File) {
+    setUploadingAvatar(true);
+    try {
+      const fd = new FormData();
+      fd.append('image', file);
+      const { data } = await api.post('/upload', fd);
+      setTokenAvatarUrl(data.url);
+    } catch {
+      // silently fail avatar upload
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  function handleTokenUserChange(userId: string) {
+    setTokenUserId(userId);
+    if (userId) {
+      const player = game?.players.find((p) => p.id === userId);
+      if (player?.avatar_url) setTokenAvatarUrl(player.avatar_url);
+    }
+  }
+
   function addToken() {
     if (!tokenLabel.trim() || !isDM) return;
     const token = {
       label: tokenLabel.trim(),
       color: tokenColor,
       userId: tokenUserId || undefined,
+      avatarUrl: tokenAvatarUrl || undefined,
       x: (stageSize.w / 2 - offset.x) / scale,
       y: (stageSize.h / 2 - offset.y) / scale,
       size: map.grid_size * 0.8,
@@ -218,6 +245,8 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
     socket?.emit('token_add', { mapId: map.id, token });
     setShowAddToken(false);
     setTokenLabel('');
+    setTokenAvatarUrl('');
+    setTokenUserId('');
   }
 
   function removeSelectedToken(tokenId: string) {
@@ -317,8 +346,34 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
 
       {/* Add token form */}
       {showAddToken && isDM && (
-        <div className="flex items-center gap-2 p-2 bg-tavern-bg border-b border-tavern-border text-sm">
-          <input className="tavern-input py-1 text-xs w-32" placeholder="Token label" value={tokenLabel} onChange={(e) => setTokenLabel(e.target.value)} />
+        <div className="flex items-center gap-2 p-2 bg-tavern-bg border-b border-tavern-border text-sm flex-wrap">
+          <input className="tavern-input py-1 text-xs w-28" placeholder="Label" value={tokenLabel} onChange={(e) => setTokenLabel(e.target.value)} />
+          {/* Player link */}
+          {game?.players && game.players.length > 0 && (
+            <select className="bg-tavern-bg border border-tavern-border text-tavern-text text-xs rounded px-1 py-1"
+              value={tokenUserId} onChange={(e) => handleTokenUserChange(e.target.value)}>
+              <option value="">NPC / Monster</option>
+              {game.players.map((p) => <option key={p.id} value={p.id}>{p.username}</option>)}
+            </select>
+          )}
+          {/* Avatar */}
+          <div className="flex items-center gap-1">
+            <input className="tavern-input py-1 text-xs w-36" placeholder="Avatar URL" value={tokenAvatarUrl} onChange={(e) => setTokenAvatarUrl(e.target.value)} />
+            <button
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="p-1 rounded border border-tavern-border text-tavern-muted hover:text-tavern-text text-xs transition-colors"
+              title="Upload image"
+            >
+              {uploadingAvatar ? '...' : <ImagePlus size={13} />}
+            </button>
+            <input ref={avatarInputRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => e.target.files?.[0] && uploadTokenAvatar(e.target.files[0])} />
+            {tokenAvatarUrl && (
+              <img src={tokenAvatarUrl} alt="" className="w-7 h-7 rounded-full object-cover border border-tavern-border" />
+            )}
+          </div>
+          {/* Color */}
           <div className="flex gap-1">
             {COLORS.map((c) => (
               <button key={c} className={clsx('w-4 h-4 rounded-full border', tokenColor === c ? 'border-white' : 'border-transparent')}
@@ -326,7 +381,7 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
             ))}
           </div>
           <button onClick={addToken} className="btn-primary text-xs py-1 px-2">Add</button>
-          <button onClick={() => setShowAddToken(false)} className="btn-secondary text-xs py-1 px-2">Cancel</button>
+          <button onClick={() => { setShowAddToken(false); setTokenAvatarUrl(''); setTokenUserId(''); }} className="btn-secondary text-xs py-1 px-2">Cancel</button>
         </div>
       )}
 

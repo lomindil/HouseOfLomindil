@@ -95,6 +95,20 @@ router.put('/:mapId', (req: AuthRequest, res: Response) => {
   res.json({ ...updated, fog_data: JSON.parse(updated.fog_data), drawings: JSON.parse(updated.drawings), tokens: JSON.parse(updated.tokens) });
 });
 
+router.patch('/:mapId/image', upload.single('image'), (req: AuthRequest, res: Response) => {
+  if (!isDM(req.params.gameId, req.user!.id)) return res.status(403).json({ error: 'DM only' });
+  if (!req.file) return res.status(400).json({ error: 'Image required' });
+
+  const { name, grid_size } = req.body;
+  const imageUrl = `/uploads/maps/${req.file.filename}`;
+  db.prepare('UPDATE maps SET name = ?, image_url = ?, grid_size = ? WHERE id = ? AND game_id = ?').run(
+    name || 'Updated Map', imageUrl, parseInt(grid_size) || 50, req.params.mapId, req.params.gameId
+  );
+  const map = db.prepare('SELECT * FROM maps WHERE id = ?').get(req.params.mapId) as any;
+  if (!map) return res.status(404).json({ error: 'Not found' });
+  res.json({ ...map, fog_data: JSON.parse(map.fog_data), drawings: JSON.parse(map.drawings), tokens: JSON.parse(map.tokens) });
+});
+
 router.delete('/:mapId', (req: AuthRequest, res: Response) => {
   if (!isDM(req.params.gameId, req.user!.id)) return res.status(403).json({ error: 'DM only' });
   db.prepare('DELETE FROM maps WHERE id = ? AND game_id = ?').run(req.params.mapId, req.params.gameId);

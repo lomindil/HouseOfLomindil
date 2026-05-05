@@ -65,7 +65,7 @@ export default function GameSessionPage() {
 
   if (loading) return (
     <div className="h-screen bg-tavern-bg flex items-center justify-center">
-      <p className="text-tavern-muted font-serif animate-pulse">Loading adventure...</p>
+      <p className="text-tavern-muted font-serif animate-pulse">Entering the Hall...</p>
     </div>
   );
 

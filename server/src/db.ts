@@ -90,10 +90,13 @@ db.exec(`
   );
 `);
 
-// Migration: add game_id column to characters if missing
+// Migrations
 try {
   db.exec(`ALTER TABLE characters ADD COLUMN game_id TEXT REFERENCES games(id) ON DELETE CASCADE`);
-} catch { /* column already exists */ }
+} catch { /* already exists */ }
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN password_hash TEXT`);
+} catch { /* already exists */ }
 
 export const stmt = (sql: string) => db.prepare(sql);
 

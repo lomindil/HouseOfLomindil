@@ -4,8 +4,9 @@ import toast from 'react-hot-toast';
 import Navbar from '../components/ui/Navbar';
 import api from '../lib/api';
 import { useAuthStore } from '../store/auth';
-import { Play, Copy, Users, Map, Plus, Trash2, Upload, BookOpen, Hammer } from 'lucide-react';
+import { Play, Copy, Users, Map, Plus, Trash2, Upload, BookOpen, Hammer, Pencil } from 'lucide-react';
 import MapBuilderModal from '../components/map/MapBuilderModal';
+import GameCharacterModal from '../components/game/GameCharacterModal';
 
 interface Game {
   id: string;
@@ -36,14 +37,10 @@ export default function GameLobbyPage() {
   const [characters, setCharacters] = useState<any[]>([]);
   const [selectedChar, setSelectedChar] = useState('');
   const [gameCharacters, setGameCharacters] = useState<any[]>([]);
-  const [showGCForm, setShowGCForm] = useState(false);
-  const [gcName, setGcName] = useState('');
-  const [gcRace, setGcRace] = useState('');
-  const [gcClass, setGcClass] = useState('');
-  const [gcHp, setGcHp] = useState(10);
-  const [gcAc, setGcAc] = useState(10);
-  const [savingGC, setSavingGC] = useState(false);
+  const [showGCModal, setShowGCModal] = useState(false);
+  const [editingGC, setEditingGC] = useState<any>(null);
   const [showMapBuilder, setShowMapBuilder] = useState(false);
+  const [editingMap, setEditingMap] = useState<{ id: string; name: string; imageUrl: string; gridSize: number } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -122,25 +119,16 @@ export default function GameLobbyPage() {
     }
   }
 
-  async function createGameCharacter(e: React.FormEvent) {
-    e.preventDefault();
-    if (!gcName.trim()) return;
-    setSavingGC(true);
-    try {
-      const sheet_data = {
-        race: gcRace, class: gcClass, level: 1,
-        combat: { max_hp: gcHp, current_hp: gcHp, temp_hp: 0, ac: gcAc, speed: 30, initiative: 0, hit_dice: '1d8', death_saves: { successes: 0, failures: 0 } },
-        abilities: { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 },
-        skills: {}, saving_throws: {}, features: [], equipment: [], spells: {}, notes: '', backstory: '',
-      };
-      const { data } = await api.post(`/games/${id}/game-characters`, { name: gcName.trim(), sheet_data });
-      setGameCharacters((prev) => [...prev, data]);
-      setShowGCForm(false);
-      setGcName(''); setGcRace(''); setGcClass(''); setGcHp(10); setGcAc(10);
-      toast.success('Game character created!');
-    } finally {
-      setSavingGC(false);
-    }
+  function handleGCSaved(char: any) {
+    setGameCharacters((prev) => {
+      const existing = prev.findIndex((c) => c.id === char.id);
+      if (existing >= 0) {
+        const next = [...prev];
+        next[existing] = char;
+        return next;
+      }
+      return [...prev, char];
+    });
   }
 
   async function saveBuiltMap(blob: Blob, name: string, gridSize: number) {
@@ -149,10 +137,17 @@ export default function GameLobbyPage() {
     fd.append('name', name);
     fd.append('grid_size', gridSize.toString());
     try {
-      const { data } = await api.post(`/games/${id}/maps`, fd);
-      toast.success(`Map "${name}" added!`);
-      setGame((g) => g ? { ...g, maps: [...g.maps, data] } : g);
+      if (editingMap) {
+        await api.patch(`/games/${id}/maps/${editingMap.id}/image`, fd);
+        toast.success(`Map "${name}" updated!`);
+        setGame((g) => g ? { ...g, maps: g.maps.map((m) => m.id === editingMap.id ? { ...m, name, grid_size: gridSize } : m) } : g);
+      } else {
+        const { data } = await api.post(`/games/${id}/maps`, fd);
+        toast.success(`Map "${name}" added!`);
+        setGame((g) => g ? { ...g, maps: [...g.maps, data] } : g);
+      }
       setShowMapBuilder(false);
+      setEditingMap(null);
     } catch {
       toast.error('Failed to save map');
     }
@@ -322,35 +317,11 @@ export default function GameLobbyPage() {
                   <BookOpen size={16} className="text-tavern-gold" />
                   <h2 className="font-serif text-tavern-gold text-sm uppercase tracking-widest">Pre-built Characters</h2>
                 </div>
-                <button onClick={() => setShowGCForm(!showGCForm)} className="text-tavern-gold hover:text-tavern-text transition-colors">
+                <button onClick={() => { setEditingGC(null); setShowGCModal(true); }} className="text-tavern-gold hover:text-tavern-gold-light transition-colors">
                   <Plus size={16} />
                 </button>
               </div>
               <p className="text-xs text-tavern-muted mb-3">Create characters players can pick when joining.</p>
-
-              {showGCForm && (
-                <form onSubmit={createGameCharacter} className="mb-3 p-3 bg-tavern-bg rounded border border-tavern-border space-y-2">
-                  <input className="tavern-input text-sm py-1.5" placeholder="Character name *" value={gcName} onChange={(e) => setGcName(e.target.value)} required />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input className="tavern-input text-sm py-1.5" placeholder="Race (e.g. Elf)" value={gcRace} onChange={(e) => setGcRace(e.target.value)} />
-                    <input className="tavern-input text-sm py-1.5" placeholder="Class (e.g. Rogue)" value={gcClass} onChange={(e) => setGcClass(e.target.value)} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="label text-xs">Max HP</label>
-                      <input type="number" min={1} max={999} className="tavern-input text-sm py-1.5 mt-1" value={gcHp} onChange={(e) => setGcHp(parseInt(e.target.value) || 10)} />
-                    </div>
-                    <div>
-                      <label className="label text-xs">AC</label>
-                      <input type="number" min={1} max={30} className="tavern-input text-sm py-1.5 mt-1" value={gcAc} onChange={(e) => setGcAc(parseInt(e.target.value) || 10)} />
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button type="submit" disabled={savingGC} className="btn-primary text-xs py-1 px-3">{savingGC ? 'Saving...' : 'Create'}</button>
-                    <button type="button" onClick={() => setShowGCForm(false)} className="btn-secondary text-xs py-1 px-3">Cancel</button>
-                  </div>
-                </form>
-              )}
 
               {gameCharacters.length === 0 ? (
                 <p className="text-tavern-muted text-sm">No pre-built characters yet.</p>
@@ -361,12 +332,20 @@ export default function GameLobbyPage() {
                       <div className="text-sm font-serif text-tavern-text">{gc.name}</div>
                       <div className="text-xs text-tavern-muted">{gc.sheet_data?.race} {gc.sheet_data?.class}</div>
                       <div className="text-xs text-tavern-muted">HP {gc.sheet_data?.combat?.max_hp} · AC {gc.sheet_data?.combat?.ac}</div>
-                      <button
-                        onClick={() => deleteGameCharacter(gc.id)}
-                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-tavern-muted hover:text-red-400 transition-all"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                      <div className="absolute top-1 right-1 hidden group-hover:flex gap-1">
+                        <button
+                          onClick={() => { setEditingGC(gc); setShowGCModal(true); }}
+                          className="text-tavern-muted hover:text-tavern-gold transition-all"
+                        >
+                          <Pencil size={11} />
+                        </button>
+                        <button
+                          onClick={() => deleteGameCharacter(gc.id)}
+                          className="text-tavern-muted hover:text-red-400 transition-all"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -417,9 +396,18 @@ export default function GameLobbyPage() {
                   <p className="text-tavern-muted text-sm">No maps yet</p>
                 ) : (
                   game.maps.map((m) => (
-                    <div key={m.id} className="flex items-center justify-between p-1.5 rounded hover:bg-tavern-bg/50">
+                    <div key={m.id} className="flex items-center justify-between p-1.5 rounded hover:bg-tavern-bg/50 group">
                       <span className="text-sm text-tavern-text">{m.name}</span>
-                      <span className="text-xs text-tavern-muted">Grid: {m.grid_size}px</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-tavern-muted">Grid: {m.grid_size}px</span>
+                        <button
+                          onClick={() => { setEditingMap({ id: m.id, name: m.name, imageUrl: m.image_url, gridSize: m.grid_size }); setShowMapBuilder(true); }}
+                          className="opacity-0 group-hover:opacity-100 text-tavern-muted hover:text-tavern-gold transition-all"
+                          title="Edit map"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </div>
                     </div>
                   ))
                 )}
@@ -431,7 +419,19 @@ export default function GameLobbyPage() {
     </div>
 
     {showMapBuilder && (
-      <MapBuilderModal onClose={() => setShowMapBuilder(false)} onSave={saveBuiltMap} />
+      <MapBuilderModal
+        onClose={() => { setShowMapBuilder(false); setEditingMap(null); }}
+        onSave={saveBuiltMap}
+        editMap={editingMap || undefined}
+      />
+    )}
+    {showGCModal && (
+      <GameCharacterModal
+        gameId={id!}
+        character={editingGC}
+        onClose={() => { setShowGCModal(false); setEditingGC(null); }}
+        onSaved={handleGCSaved}
+      />
     )}
     </>
   );

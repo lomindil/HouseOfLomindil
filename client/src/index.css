@@ -18,33 +18,33 @@
 
 @layer components {
   .tavern-card {
-    @apply bg-tavern-card border border-tavern-border rounded-lg;
+    @apply bg-tavern-card border border-tavern-border rounded-lg transition-colors;
   }
 
   .tavern-input {
-    @apply bg-tavern-bg border border-tavern-border rounded px-3 py-2
-           text-tavern-text placeholder-tavern-muted/50
-           focus:outline-none focus:border-tavern-gold
-           transition-colors w-full font-body text-sm;
+    @apply bg-tavern-bg border border-tavern-border rounded-md px-3 py-2
+           text-tavern-text placeholder-tavern-muted/40
+           focus:outline-none focus:border-tavern-gold/70 focus:ring-1 focus:ring-tavern-gold/20
+           transition-all w-full font-body text-sm;
   }
 
   .btn-primary {
     @apply bg-tavern-gold hover:bg-tavern-gold-light text-tavern-bg
-           font-serif font-semibold px-6 py-2 rounded
-           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-           cursor-pointer select-none;
+           font-serif font-semibold px-6 py-2 rounded-md
+           transition-all disabled:opacity-50 disabled:cursor-not-allowed
+           cursor-pointer select-none shadow-sm hover:shadow-md hover:-translate-y-px active:translate-y-0;
   }
 
   .btn-secondary {
     @apply bg-transparent hover:bg-tavern-border/30 text-tavern-text
-           border border-tavern-border font-serif px-6 py-2 rounded
-           transition-colors cursor-pointer select-none;
+           border border-tavern-border font-serif px-6 py-2 rounded-md
+           transition-all cursor-pointer select-none hover:-translate-y-px active:translate-y-0;
   }
 
   .btn-danger {
     @apply bg-tavern-red hover:bg-tavern-red-light text-parchment-50
-           font-serif font-semibold px-6 py-2 rounded
-           transition-colors disabled:opacity-50 cursor-pointer select-none;
+           font-serif font-semibold px-6 py-2 rounded-md
+           transition-all disabled:opacity-50 cursor-pointer select-none;
   }
 
   .stat-box {

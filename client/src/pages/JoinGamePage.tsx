@@ -35,7 +35,7 @@ export default function JoinGamePage() {
   if (!user) return (
     <div className="min-h-screen bg-tavern-bg flex items-center justify-center px-4">
       <div className="tavern-card p-8 max-w-sm w-full text-center">
-        <div className="text-4xl mb-4">⚔</div>
+        <div className="text-4xl mb-4">🏰</div>
         <h2 className="font-serif text-xl text-tavern-gold mb-2">Sign in to Join</h2>
         {game && <p className="text-tavern-muted text-sm mb-4">You've been invited to: <strong>{game.name}</strong></p>}
         <Link to={`/login?redirect=/join/${code}`} className="btn-primary block">Sign In / Register</Link>

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Download, Sliders } from 'lucide-react';
+import { X, Download, Sliders, ImagePlus } from 'lucide-react';
 import clsx from 'clsx';
 
 interface Props {
   onClose: () => void;
   onSave: (blob: Blob, name: string, gridSize: number) => void;
+  editMap?: { id: string; name: string; imageUrl: string; gridSize: number };
 }
 
 type Preset = 'blank' | 'forest' | 'riverside' | 'dungeon';
@@ -172,24 +173,50 @@ function drawStamps(ctx: CanvasRenderingContext2D, stamps: Stamp[], gridSize: nu
   }
 }
 
-export default function MapBuilderModal({ onClose, onSave }: Props) {
+export default function MapBuilderModal({ onClose, onSave, editMap }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgInputRef = useRef<HTMLInputElement>(null);
   const [preset, setPreset] = useState<Preset>('blank');
-  const [gridSize, setGridSize] = useState(60);
+  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [gridSize, setGridSize] = useState(editMap?.gridSize ?? 60);
   const [stamps, setStamps] = useState<Stamp[]>([]);
   const [activeTerrain, setActiveTerrain] = useState<string | null>(null);
-  const [mapName, setMapName] = useState('Custom Map');
+  const [mapName, setMapName] = useState(editMap?.name ?? 'Custom Map');
   const [saving, setSaving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  // Load existing map image if editing
+  useEffect(() => {
+    if (!editMap?.imageUrl) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => setBgImage(img);
+    img.src = editMap.imageUrl;
+  }, []);
+
+  function handleImageImport(file: File) {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      setBgImage(img);
+      setStamps([]);
+    };
+    img.src = url;
+  }
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
-    drawPreset(ctx, preset);
+    if (bgImage) {
+      ctx.clearRect(0, 0, MAP_W, MAP_H);
+      ctx.drawImage(bgImage, 0, 0, MAP_W, MAP_H);
+    } else {
+      drawPreset(ctx, preset);
+    }
     drawGrid(ctx, gridSize);
     drawStamps(ctx, stamps, gridSize);
-  }, [preset, gridSize, stamps]);
+  }, [preset, bgImage, gridSize, stamps]);
 
   useEffect(() => { redraw(); }, [redraw]);
 
@@ -251,7 +278,7 @@ export default function MapBuilderModal({ onClose, onSave }: Props) {
               <Sliders size={14} />
             </button>
             <button onClick={handleSave} disabled={saving} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5">
-              <Download size={12} /> {saving ? 'Saving...' : 'Add to Game'}
+              <Download size={12} /> {saving ? 'Saving...' : editMap ? 'Update Map' : 'Add to Game'}
             </button>
             <button onClick={onClose} className="text-tavern-muted hover:text-tavern-text transition-colors p-1">
               <X size={16} />
@@ -279,8 +306,35 @@ export default function MapBuilderModal({ onClose, onSave }: Props) {
 
         {/* Toolbar */}
         <div className="flex items-start gap-2 p-2 border-b border-tavern-border flex-shrink-0 flex-wrap">
-          {/* Presets */}
-          <div className="flex gap-1 mr-2">
+          {/* Import image */}
+          <div className="flex gap-1 mr-1 items-center">
+            <button
+              onClick={() => imgInputRef.current?.click()}
+              title="Import image as background"
+              className={clsx(
+                'flex flex-col items-center px-2 py-1 rounded border text-xs transition-colors',
+                bgImage ? 'border-tavern-gold bg-tavern-gold/10 text-tavern-gold' : 'border-tavern-border text-tavern-muted hover:text-tavern-text'
+              )}
+            >
+              <ImagePlus size={14} />
+              <span className="text-[9px] mt-0.5">Import</span>
+            </button>
+            {bgImage && (
+              <button
+                onClick={() => setBgImage(null)}
+                title="Remove imported image"
+                className="flex flex-col items-center px-1.5 py-1 rounded border border-tavern-border text-tavern-muted hover:text-red-400 text-xs transition-colors"
+              >
+                <X size={12} />
+                <span className="text-[9px] mt-0.5">Clear</span>
+              </button>
+            )}
+            <input ref={imgInputRef} type="file" accept="image/*" className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleImageImport(e.target.files[0])} />
+          </div>
+
+          {/* Presets (disabled when custom image loaded) */}
+          <div className={clsx('flex gap-1 mr-2', bgImage && 'opacity-40 pointer-events-none')}>
             {PRESETS.map((p) => (
               <button
                 key={p.id}
@@ -288,7 +342,7 @@ export default function MapBuilderModal({ onClose, onSave }: Props) {
                 title={p.label}
                 className={clsx(
                   'flex flex-col items-center px-2 py-1 rounded border text-xs transition-colors',
-                  preset === p.id ? 'border-tavern-gold bg-tavern-gold/10 text-tavern-gold' : 'border-tavern-border text-tavern-muted hover:text-tavern-text'
+                  preset === p.id && !bgImage ? 'border-tavern-gold bg-tavern-gold/10 text-tavern-gold' : 'border-tavern-border text-tavern-muted hover:text-tavern-text'
                 )}
               >
                 <span>{p.emoji}</span>

@@ -74,7 +74,7 @@ export default function ChatPanel() {
       <div className="flex-1 overflow-y-auto p-3 space-y-1 min-h-0">
         {messages.length === 0 ? (
           <div className="text-center text-tavern-muted text-xs font-serif py-4 italic">
-            The adventurers gather around the table...
+            The hall falls quiet, awaiting the tale...
           </div>
         ) : (
           messages.map((msg) => <MessageRow key={msg.id} msg={msg} />)

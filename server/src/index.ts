@@ -5,12 +5,19 @@ import { Server } from 'socket.io';
 import cors from 'cors';
 import path from 'path';
 
+import fs from 'fs';
 import authRouter from './routes/auth';
 import charactersRouter from './routes/characters';
 import gamesRouter from './routes/games';
 import mapsRouter from './routes/maps';
 import chatRouter from './routes/chat';
+import uploadRouter from './routes/upload';
 import { setupGameSocket } from './socket/gameSocket';
+
+// Ensure upload directories exist
+['uploads/avatars', 'uploads/maps', 'uploads/tokens'].forEach((dir) => {
+  fs.mkdirSync(path.join(__dirname, '..', dir), { recursive: true });
+});
 
 const app = express();
 const httpServer = createServer(app);
@@ -38,6 +45,7 @@ app.use('/api/characters', charactersRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/games/:gameId/maps', mapsRouter);
 app.use('/api/games/:gameId', chatRouter);
+app.use('/api/upload', uploadRouter);
 
 setupGameSocket(io);
 

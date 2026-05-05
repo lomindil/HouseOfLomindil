@@ -18,27 +18,27 @@ interface AuthStore {
 
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
-  token: localStorage.getItem('tavern_token'),
+  token: localStorage.getItem('lomindil_token'),
   loading: true,
 
   setAuth: (user, token) => {
-    localStorage.setItem('tavern_token', token);
+    localStorage.setItem('lomindil_token', token);
     set({ user, token, loading: false });
   },
 
   logout: () => {
-    localStorage.removeItem('tavern_token');
+    localStorage.removeItem('lomindil_token');
     set({ user: null, token: null, loading: false });
   },
 
   fetchMe: async () => {
-    const token = localStorage.getItem('tavern_token');
+    const token = localStorage.getItem('lomindil_token');
     if (!token) { set({ loading: false }); return; }
     try {
       const { data } = await api.get('/auth/me');
       set({ user: data.user, token, loading: false });
     } catch {
-      localStorage.removeItem('tavern_token');
+      localStorage.removeItem('lomindil_token');
       set({ user: null, token: null, loading: false });
     }
   },
