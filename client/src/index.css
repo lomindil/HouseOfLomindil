@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    @apply bg-tavern-bg text-tavern-text font-body m-0 p-0 w-full min-h-screen;
+    scrollbar-width: thin;
+    scrollbar-color: #4a2f1a #0d0805;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #0d0805; }
+  ::-webkit-scrollbar-thumb { background: #4a2f1a; border-radius: 3px; }
+
+  h1, h2, h3, h4 { @apply font-serif; }
+}
+
+@layer components {
+  .tavern-card {
+    @apply bg-tavern-card border border-tavern-border rounded-lg;
+  }
+
+  .tavern-input {
+    @apply bg-tavern-bg border border-tavern-border rounded px-3 py-2
+           text-tavern-text placeholder-tavern-muted/50
+           focus:outline-none focus:border-tavern-gold
+           transition-colors w-full font-body text-sm;
+  }
+
+  .btn-primary {
+    @apply bg-tavern-gold hover:bg-tavern-gold-light text-tavern-bg
+           font-serif font-semibold px-6 py-2 rounded
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+           cursor-pointer select-none;
+  }
+
+  .btn-secondary {
+    @apply bg-transparent hover:bg-tavern-border/30 text-tavern-text
+           border border-tavern-border font-serif px-6 py-2 rounded
+           transition-colors cursor-pointer select-none;
+  }
+
+  .btn-danger {
+    @apply bg-tavern-red hover:bg-tavern-red-light text-parchment-50
+           font-serif font-semibold px-6 py-2 rounded
+           transition-colors disabled:opacity-50 cursor-pointer select-none;
+  }
+
+  .stat-box {
+    @apply flex flex-col items-center justify-center bg-tavern-bg border border-tavern-border
+           rounded-lg p-2 gap-1;
+  }
+
+  .gold-divider {
+    @apply border-t border-tavern-gold/40 my-4;
+  }
+
+  .page-title {
+    @apply font-serif text-3xl font-bold text-tavern-gold-light tracking-wide;
+  }
+
+  .label {
+    @apply text-xs text-tavern-muted uppercase tracking-widest font-serif;
+  }
+}
+
+@keyframes dice-roll {
+  0% { transform: rotate(0deg) scale(1); }
+  25% { transform: rotate(180deg) scale(1.3); }
+  50% { transform: rotate(360deg) scale(0.9); }
+  75% { transform: rotate(540deg) scale(1.2); }
+  100% { transform: rotate(720deg) scale(1); }
+}
+
+@keyframes dice-bounce {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-12px); }
+  60% { transform: translateY(-6px); }
+}
+
+.dice-rolling { animation: dice-roll 0.7s ease-in-out; }
+.dice-bounce { animation: dice-bounce 0.5s ease-out; }
+
+.map-draw { cursor: crosshair !important; }
+.map-pan { cursor: grab !important; }
+.map-pan:active { cursor: grabbing !important; }
+.map-fog { cursor: cell !important; }
+.map-erase { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E") 12 12, crosshair !important; }
