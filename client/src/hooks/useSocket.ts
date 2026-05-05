@@ -14,7 +14,7 @@ const SOCKET_URL = window.location.origin;
 
 export function useGameSocket(gameId: string) {
   const { token } = useAuthStore();
-  const { setSocket, addMessage, updateToken, addToken, removeToken, updateDrawings, updateFog, setPlayerOnline, setMap, setHpOverride } = useGameStore();
+  const { setSocket, addMessage, updateToken, addToken, removeToken, updateDrawings, updateFog, setPlayerOnline, setMap, setHpOverride, setActiveEncounter, updateEncounterCombatant, setEncounterRound } = useGameStore();
   const socketRef = useRef<any>(null);
 
   useEffect(() => {
@@ -71,6 +71,26 @@ export function useGameSocket(gameId: string) {
 
     socket.on('character_hp_update', ({ characterId, current_hp, max_hp }: any) => {
       setHpOverride(characterId, { current_hp, max_hp });
+    });
+
+    socket.on('encounter_started', ({ encounterId, name, combatants, round }: any) => {
+      setActiveEncounter({ id: encounterId, name, round, combatants });
+    });
+
+    socket.on('encounter_combatant_updated', ({ combatantId, current_hp, initiative, status }: any) => {
+      const updates: any = {};
+      if (current_hp !== undefined) updates.current_hp = current_hp;
+      if (initiative !== undefined) updates.initiative = initiative;
+      if (status !== undefined) updates.status = status;
+      updateEncounterCombatant(combatantId, updates);
+    });
+
+    socket.on('encounter_round', ({ encounterId, round }: any) => {
+      setEncounterRound(encounterId, round);
+    });
+
+    socket.on('encounter_ended', () => {
+      setActiveEncounter(null);
     });
 
     return () => {

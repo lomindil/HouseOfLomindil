@@ -93,7 +93,7 @@ export default function GameCharacterModal({ gameId, character, onClose, onSaved
   const pb = sheet.proficiency_bonus || 2;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-start justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto">
       <div className="bg-tavern-card border border-tavern-border rounded-lg w-full max-w-4xl my-4">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-tavern-border sticky top-0 bg-tavern-card z-10">

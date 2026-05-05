@@ -70,13 +70,36 @@ export interface HpOverride {
   max_hp: number;
 }
 
+export interface Combatant {
+  id: string;
+  name: string;
+  type: string;
+  initiative: number;
+  current_hp: number;
+  max_hp: number;
+  ac: number;
+  avatar_url?: string;
+  status: string;
+  sort_order: number;
+  stats?: Record<string, any>;
+  actions?: any[];
+}
+
+export interface ActiveEncounter {
+  id: string;
+  name: string;
+  round: number;
+  combatants: Combatant[];
+}
+
 interface GameStore {
   game: Game | null;
   currentMap: MapData | null;
   messages: ChatMessage[];
   onlinePlayers: Set<string>;
   socket: Socket | null;
-  hpOverrides: Record<string, HpOverride>; // characterId → live HP
+  hpOverrides: Record<string, HpOverride>;
+  activeEncounter: ActiveEncounter | null;
 
   setGame: (game: Game) => void;
   setMap: (map: MapData) => void;
@@ -90,6 +113,9 @@ interface GameStore {
   updateFog: (mapId: string, fogData: Record<string, boolean>) => void;
   setPlayerOnline: (userId: string, online: boolean) => void;
   setHpOverride: (characterId: string, hp: HpOverride) => void;
+  setActiveEncounter: (enc: ActiveEncounter | null) => void;
+  updateEncounterCombatant: (combatantId: string, updates: Partial<Combatant>) => void;
+  setEncounterRound: (encounterId: string, round: number) => void;
   reset: () => void;
 }
 
@@ -100,6 +126,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   onlinePlayers: new Set(),
   socket: null,
   hpOverrides: {},
+  activeEncounter: null,
 
   setGame: (game) => set({ game }),
   setMap: (map) => set({ currentMap: map }),
@@ -145,5 +172,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     hpOverrides: { ...s.hpOverrides, [characterId]: hp },
   })),
 
-  reset: () => set({ game: null, currentMap: null, messages: [], onlinePlayers: new Set(), socket: null, hpOverrides: {} }),
+  setActiveEncounter: (enc) => set({ activeEncounter: enc }),
+
+  updateEncounterCombatant: (combatantId, updates) => set((s) => {
+    if (!s.activeEncounter) return s;
+    const combatants = s.activeEncounter.combatants.map((c) =>
+      c.id === combatantId ? { ...c, ...updates } : c
+    );
+    return { activeEncounter: { ...s.activeEncounter, combatants } };
+  }),
+
+  setEncounterRound: (encounterId, round) => set((s) => {
+    if (!s.activeEncounter || s.activeEncounter.id !== encounterId) return s;
+    return { activeEncounter: { ...s.activeEncounter, round } };
+  }),
+
+  reset: () => set({ game: null, currentMap: null, messages: [], onlinePlayers: new Set(), socket: null, hpOverrides: {}, activeEncounter: null }),
 }));

@@ -5,7 +5,7 @@ import { scrypt, randomBytes, timingSafeEqual } from 'crypto';
 import { promisify } from 'util';
 import db from '../db';
 import { generateOTP, sendOTP } from '../utils/mailer';
-import { signToken } from '../middleware/auth';
+import { signToken, authenticate, AuthRequest } from '../middleware/auth';
 
 const scryptAsync = promisify(scrypt);
 const JWT_SECRET = process.env.JWT_SECRET || 'tavern-secret-change-in-production';
@@ -138,6 +138,28 @@ router.post('/verify-otp', async (req: Request, res: Response) => {
 
   const token = signToken({ id: user.id, email: user.email, username: user.username });
   res.json({ token, user: { id: user.id, email: user.email, username: user.username } });
+});
+
+router.post('/change-password', authenticate, async (req: AuthRequest, res: Response) => {
+  const { current_password, new_password } = req.body;
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: 'Current and new password required' });
+  }
+  if (new_password.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user!.id) as any;
+  if (!user || !user.password_hash) {
+    return res.status(400).json({ error: 'No password set for this account' });
+  }
+
+  const valid = await verifyPassword(current_password, user.password_hash);
+  if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
+
+  const hash = await hashPassword(new_password);
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user!.id);
+  res.json({ ok: true });
 });
 
 router.get('/me', (req: Request, res: Response) => {

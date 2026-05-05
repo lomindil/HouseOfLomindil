@@ -117,38 +117,45 @@ export default function GamesPage() {
           </div>
         </div>
 
-        {/* Create form */}
+        {/* Create campaign modal */}
         {showCreate && (
-          <div className="tavern-card p-5 mb-6 border-tavern-gold/30">
-            <h2 className="font-serif text-tavern-gold mb-4 text-sm uppercase tracking-widest">New Campaign</h2>
-            <form onSubmit={createGame} className="space-y-3">
-              <input className="tavern-input" placeholder="Campaign name" value={newName} onChange={(e) => setNewName(e.target.value)} required autoFocus />
-              <textarea className="tavern-input resize-none" rows={2} placeholder="Description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
-              <div className="flex gap-2">
-                <button type="submit" disabled={creating} className="btn-primary text-sm">{creating ? 'Creating...' : 'Create'}</button>
-                <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary text-sm">Cancel</button>
-              </div>
-            </form>
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-tavern-card border border-tavern-border rounded-lg w-full max-w-md p-6">
+              <h2 className="font-serif text-tavern-gold mb-5 text-lg">New Campaign</h2>
+              <form onSubmit={createGame} className="space-y-4">
+                <input className="tavern-input" placeholder="Campaign name" value={newName} onChange={(e) => setNewName(e.target.value)} required autoFocus />
+                <textarea className="tavern-input resize-none" rows={3} placeholder="Description (optional)" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} />
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary text-sm">Cancel</button>
+                  <button type="submit" disabled={creating} className="btn-primary text-sm">{creating ? 'Creating...' : 'Create Campaign'}</button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 
-        {/* Join form */}
+        {/* Join game modal */}
         {showJoin && (
-          <div className="tavern-card p-5 mb-6 border-tavern-gold/30">
-            <h2 className="font-serif text-tavern-gold mb-4 text-sm uppercase tracking-widest">Join a Game</h2>
-            <form onSubmit={joinGame} className="flex gap-2">
-              <input
-                className="tavern-input text-center tracking-widest text-lg font-serif"
-                placeholder="AB12CD"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 6))}
-                maxLength={6}
-                required
-                autoFocus
-              />
-              <button type="submit" className="btn-primary whitespace-nowrap">Join</button>
-              <button type="button" onClick={() => setShowJoin(false)} className="btn-secondary">✕</button>
-            </form>
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-tavern-card border border-tavern-border rounded-lg w-full max-w-sm p-6">
+              <h2 className="font-serif text-tavern-gold mb-2 text-lg">Join a Game</h2>
+              <p className="text-tavern-muted text-sm mb-5">Enter the 6-character join code from your DM.</p>
+              <form onSubmit={joinGame} className="space-y-4">
+                <input
+                  className="tavern-input text-center tracking-widest text-2xl font-serif py-3"
+                  placeholder="AB12CD"
+                  value={joinCode}
+                  onChange={(e) => setJoinCode(e.target.value.toUpperCase().slice(0, 6))}
+                  maxLength={6}
+                  required
+                  autoFocus
+                />
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => setShowJoin(false)} className="btn-secondary text-sm">Cancel</button>
+                  <button type="submit" className="btn-primary text-sm">Join Game</button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
 

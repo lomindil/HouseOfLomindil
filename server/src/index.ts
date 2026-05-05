@@ -12,6 +12,8 @@ import gamesRouter from './routes/games';
 import mapsRouter from './routes/maps';
 import chatRouter from './routes/chat';
 import uploadRouter from './routes/upload';
+import monstersRouter from './routes/monsters';
+import encountersRouter from './routes/encounters';
 import { setupGameSocket } from './socket/gameSocket';
 
 // Ensure upload directories exist
@@ -44,6 +46,8 @@ app.use('/api/auth', authRouter);
 app.use('/api/characters', charactersRouter);
 app.use('/api/games', gamesRouter);
 app.use('/api/games/:gameId/maps', mapsRouter);
+app.use('/api/games/:gameId/monsters', monstersRouter);
+app.use('/api/games/:gameId/encounters', encountersRouter);
 app.use('/api/games/:gameId', chatRouter);
 app.use('/api/upload', uploadRouter);
 

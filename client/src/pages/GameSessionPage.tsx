@@ -10,10 +10,11 @@ import ChatPanel from '../components/chat/ChatPanel';
 import DiceRoller from '../components/dice/DiceRoller';
 import HandoutsPanel from '../components/game/HandoutsPanel';
 import PartyPanel from '../components/game/PartyPanel';
-import { Dices, MessageSquare, Map, Users, FileText, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import EncounterPanel from '../components/game/EncounterPanel';
+import { Dices, MessageSquare, Map, Users, FileText, ArrowLeft, ChevronLeft, ChevronRight, Swords } from 'lucide-react';
 import clsx from 'clsx';
 
-type Tab = 'chat' | 'dice' | 'handouts' | 'players';
+type Tab = 'chat' | 'dice' | 'handouts' | 'players' | 'encounters';
 
 export default function GameSessionPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +25,9 @@ export default function GameSessionPage() {
   const [tab, setTab] = useState<Tab>('chat');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mapsList, setMapsList] = useState<any[]>([]);
+  const [showEndDialog, setShowEndDialog] = useState(false);
+  const [endNotes, setEndNotes] = useState('');
+  const [endingSession, setEndingSession] = useState(false);
 
   useGameSocket(id!);
 
@@ -54,6 +58,20 @@ export default function GameSessionPage() {
       navigate(`/games/${id}`);
     }).finally(() => setLoading(false));
   }, [id]);
+
+  async function handleEndSession() {
+    if (!id) return;
+    setEndingSession(true);
+    try {
+      await api.post(`/games/${id}/end`, { footnotes: endNotes });
+      toast.success('Session ended');
+      navigate(`/games/${id}`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to end session');
+    } finally {
+      setEndingSession(false);
+    }
+  }
 
   async function switchMap(mapId: string) {
     if (!game?.is_dm) return;
@@ -97,9 +115,19 @@ export default function GameSessionPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-2 text-xs text-tavern-muted">
-          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-          Online
+        <div className="flex items-center gap-3">
+          {isDM && (
+            <button
+              onClick={() => setShowEndDialog(true)}
+              className="text-xs text-red-400 hover:text-red-300 border border-red-900 hover:border-red-700 px-2 py-1 rounded transition-colors"
+            >
+              End Session
+            </button>
+          )}
+          <div className="flex items-center gap-2 text-xs text-tavern-muted">
+            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+            Online
+          </div>
         </div>
       </header>
 
@@ -140,6 +168,7 @@ export default function GameSessionPage() {
                 { id: 'dice', icon: <Dices size={14} />, label: 'Dice' },
                 { id: 'handouts', icon: <FileText size={14} />, label: 'Notes' },
                 { id: 'players', icon: <Users size={14} />, label: 'Party' },
+                ...(isDM ? [{ id: 'encounters' as Tab, icon: <Swords size={14} />, label: 'Combat' }] : []),
               ] as Array<{ id: Tab; icon: React.ReactNode; label: string }>).map(({ id: tid, icon, label }) => (
                 <button
                   key={tid}
@@ -165,10 +194,47 @@ export default function GameSessionPage() {
                   <PartyPanel gameId={id!} isDM={isDM} />
                 </div>
               )}
+              {tab === 'encounters' && isDM && (
+                <div className="h-full overflow-y-auto">
+                  <EncounterPanel gameId={id!} isDM={isDM} />
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
+
+      {/* End Session dialog */}
+      {showEndDialog && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-tavern-card border border-tavern-border rounded-lg p-6 w-full max-w-md">
+            <h2 className="font-serif text-tavern-gold text-lg mb-1">End Session</h2>
+            <p className="text-tavern-muted text-sm mb-4">Optionally write footnotes for this session before closing.</p>
+            <textarea
+              className="w-full bg-tavern-bg border border-tavern-border rounded p-3 text-tavern-text text-sm resize-none h-32 mb-4 focus:outline-none focus:border-tavern-gold"
+              placeholder="Session notes, key moments, cliffhangers..."
+              value={endNotes}
+              onChange={(e) => setEndNotes(e.target.value)}
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowEndDialog(false)}
+                className="btn-secondary text-sm"
+                disabled={endingSession}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEndSession}
+                disabled={endingSession}
+                className="px-4 py-2 text-sm rounded bg-red-900 hover:bg-red-800 text-red-100 border border-red-700 transition-colors disabled:opacity-50"
+              >
+                {endingSession ? 'Ending...' : 'End Session'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

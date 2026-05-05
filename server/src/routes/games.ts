@@ -1,7 +1,15 @@
 import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import multer from 'multer';
+import path from 'path';
 import db from '../db';
 import { authenticate, AuthRequest } from '../middleware/auth';
+
+const avatarStorage = multer.diskStorage({
+  destination: path.join(__dirname, '../../uploads/avatars'),
+  filename: (_req, file, cb) => cb(null, `gc-${uuidv4()}${path.extname(file.originalname)}`),
+});
+const gcUpload = multer({ storage: avatarStorage, limits: { fileSize: 2 * 1024 * 1024 } });
 
 const router = Router();
 router.use(authenticate);
@@ -113,7 +121,7 @@ router.get('/:id', (req: AuthRequest, res: Response) => {
     WHERE gp.game_id = ?
   `).all(req.params.id);
 
-  const maps = db.prepare('SELECT id, name, grid_size, grid_color FROM maps WHERE game_id = ?').all(req.params.id);
+  const maps = db.prepare('SELECT id, name, grid_size, grid_color, image_url FROM maps WHERE game_id = ?').all(req.params.id);
 
   res.json({ ...game, dm_username: dm?.username, players, maps, is_dm: game.dm_id === req.user!.id });
 });
@@ -125,16 +133,38 @@ router.post('/:id/launch', (req: AuthRequest, res: Response) => {
   const activeCount = (db.prepare("SELECT COUNT(*) as cnt FROM games WHERE status = 'active' AND id != ?").get(req.params.id) as any).cnt;
   if (activeCount >= 3) return res.status(409).json({ error: 'Maximum of 3 games can be active simultaneously' });
 
-  db.prepare("UPDATE games SET status = 'active' WHERE id = ?").run(req.params.id);
-  res.json({ status: 'active', join_code: game.join_code });
+  const sessionCount = (db.prepare('SELECT COUNT(*) as cnt FROM game_sessions WHERE game_id = ?').get(req.params.id) as any).cnt;
+  const sessionId = uuidv4();
+  const sessionName = req.body.session_name || `Session ${sessionCount + 1}`;
+  db.prepare('INSERT INTO game_sessions (id, game_id, name, session_number) VALUES (?,?,?,?)').run(
+    sessionId, req.params.id, sessionName, sessionCount + 1
+  );
+  db.prepare("UPDATE games SET status = 'active', current_session_id = ? WHERE id = ?").run(sessionId, req.params.id);
+  res.json({ status: 'active', join_code: game.join_code, session_id: sessionId });
 });
 
 router.post('/:id/end', (req: AuthRequest, res: Response) => {
   const game = db.prepare('SELECT * FROM games WHERE id = ? AND dm_id = ?').get(req.params.id, req.user!.id) as any;
   if (!game) return res.status(403).json({ error: 'Not authorized' });
 
-  db.prepare("UPDATE games SET status = 'ended' WHERE id = ?").run(req.params.id);
-  res.json({ status: 'ended' });
+  const { footnotes } = req.body;
+  if (game.current_session_id) {
+    db.prepare('UPDATE game_sessions SET status = ?, footnotes = ?, ended_at = unixepoch() WHERE id = ?').run(
+      'ended', footnotes || '', game.current_session_id
+    );
+  }
+  db.prepare("UPDATE games SET status = 'lobby', current_session_id = NULL WHERE id = ?").run(req.params.id);
+  res.json({ status: 'lobby' });
+});
+
+router.get('/:id/sessions', (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT * FROM games WHERE id = ?').get(req.params.id) as any;
+  if (!game) return res.status(404).json({ error: 'Not found' });
+  const isMember = game.dm_id === req.user!.id ||
+    db.prepare('SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?').get(req.params.id, req.user!.id);
+  if (!isMember) return res.status(403).json({ error: 'Not a member' });
+  const sessions = db.prepare('SELECT * FROM game_sessions WHERE game_id = ? ORDER BY session_number ASC').all(req.params.id);
+  res.json(sessions);
 });
 
 // Pre-built game characters (DM creates, players can claim)
@@ -173,6 +203,15 @@ router.put('/:id/game-characters/:charId', (req: AuthRequest, res: Response) => 
   );
   const char = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.charId) as any;
   res.json({ ...char, sheet_data: JSON.parse(char.sheet_data) });
+});
+
+router.post('/:id/game-characters/:charId/avatar', gcUpload.single('avatar'), (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT * FROM games WHERE id = ? AND dm_id = ?').get(req.params.id, req.user!.id) as any;
+  if (!game) return res.status(403).json({ error: 'DM only' });
+  if (!req.file) return res.status(400).json({ error: 'No file' });
+  const url = `/uploads/avatars/${req.file.filename}`;
+  db.prepare('UPDATE characters SET avatar_url = ? WHERE id = ? AND game_id = ?').run(url, req.params.charId, req.params.id);
+  res.json({ avatar_url: url });
 });
 
 router.delete('/:id/game-characters/:charId', (req: AuthRequest, res: Response) => {
@@ -244,6 +283,26 @@ router.put('/:id', (req: AuthRequest, res: Response) => {
     req.params.id
   );
   res.json(db.prepare('SELECT * FROM games WHERE id = ?').get(req.params.id));
+});
+
+router.delete('/:id', (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT * FROM games WHERE id = ? AND dm_id = ?').get(req.params.id, req.user!.id) as any;
+  if (!game) return res.status(403).json({ error: 'Not authorized' });
+
+  const gid = req.params.id;
+  // Delete all related data in dependency order
+  db.prepare('DELETE FROM encounter_combatants WHERE encounter_id IN (SELECT id FROM encounters WHERE game_id = ?)').run(gid);
+  db.prepare('DELETE FROM encounters WHERE game_id = ?').run(gid);
+  db.prepare('DELETE FROM game_monsters WHERE game_id = ?').run(gid);
+  db.prepare('DELETE FROM game_sessions WHERE game_id = ?').run(gid);
+  db.prepare('DELETE FROM chat_messages WHERE game_id = ?').run(gid);
+  db.prepare('DELETE FROM handouts WHERE game_id = ?').run(gid);
+  db.prepare('DELETE FROM maps WHERE game_id = ?').run(gid);
+  db.prepare('DELETE FROM game_players WHERE game_id = ?').run(gid);
+  db.prepare('DELETE FROM characters WHERE game_id = ?').run(gid);
+  db.prepare('DELETE FROM games WHERE id = ?').run(gid);
+
+  res.json({ ok: true });
 });
 
 export default router;

@@ -65,22 +65,27 @@
   }
 }
 
-@keyframes dice-roll {
-  0% { transform: rotate(0deg) scale(1); }
-  25% { transform: rotate(180deg) scale(1.3); }
-  50% { transform: rotate(360deg) scale(0.9); }
-  75% { transform: rotate(540deg) scale(1.2); }
-  100% { transform: rotate(720deg) scale(1); }
+@keyframes die-tumble {
+  0%   { transform: perspective(280px) rotateX(0deg)   rotateY(0deg)   rotateZ(0deg)   scale3d(1,1,1); }
+  15%  { transform: perspective(280px) rotateX(220deg) rotateY(100deg) rotateZ(80deg)  scale3d(1.12,1.12,1.12); }
+  30%  { transform: perspective(280px) rotateX(380deg) rotateY(250deg) rotateZ(195deg) scale3d(0.88,0.88,0.88); }
+  50%  { transform: perspective(280px) rotateX(510deg) rotateY(390deg) rotateZ(290deg) scale3d(1.08,1.08,1.08); }
+  70%  { transform: perspective(280px) rotateX(640deg) rotateY(495deg) rotateZ(355deg) scale3d(0.94,0.94,0.94); }
+  85%  { transform: perspective(280px) rotateX(700deg) rotateY(545deg) rotateZ(400deg) scale3d(1.02,1.02,1.02); }
+  100% { transform: perspective(280px) rotateX(720deg) rotateY(560deg) rotateZ(420deg) scale3d(1,1,1); }
 }
 
-@keyframes dice-bounce {
-  0%, 100% { transform: translateY(0); }
-  40% { transform: translateY(-12px); }
-  60% { transform: translateY(-6px); }
+@keyframes die-land {
+  0%   { transform: perspective(280px) rotateX(0deg) rotateY(0deg) rotateZ(12deg)  scale3d(1.05,1.05,1.05); }
+  50%  { transform: perspective(280px) rotateX(0deg) rotateY(0deg) rotateZ(-5deg)  scale3d(0.97,0.97,0.97); }
+  75%  { transform: perspective(280px) rotateX(0deg) rotateY(0deg) rotateZ(2deg)   scale3d(1.01,1.01,1.01); }
+  100% { transform: perspective(280px) rotateX(0deg) rotateY(0deg) rotateZ(0deg)   scale3d(1,1,1); }
 }
 
-.dice-rolling { animation: dice-roll 0.7s ease-in-out; }
-.dice-bounce { animation: dice-bounce 0.5s ease-out; }
+.die-tumbling { animation: die-tumble 0.75s cubic-bezier(0.4,0,0.6,1) both; }
+.die-landing  { animation: die-land  0.4s  cubic-bezier(0.22,0.61,0.36,1) both; }
+.dice-rolling { animation: die-tumble 0.75s ease-in-out; }
+.dice-bounce  { animation: die-land  0.4s  ease-out; }
 
 .map-draw { cursor: crosshair !important; }
 .map-pan { cursor: grab !important; }

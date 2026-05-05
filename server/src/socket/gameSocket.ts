@@ -255,6 +255,72 @@ export function setupGameSocket(io: Server) {
       });
     });
 
+    // Encounter events (DM only)
+    socket.on('encounter_start', ({ encounterId }: any) => {
+      if (!socket.gameId || !socket.isDM) return;
+      const enc = db.prepare('SELECT * FROM encounters WHERE id = ? AND game_id = ?').get(encounterId, socket.gameId) as any;
+      if (!enc) return;
+      db.prepare("UPDATE encounters SET status = 'active', round = 1 WHERE id = ?").run(encounterId);
+      const combatants = db.prepare('SELECT * FROM encounter_combatants WHERE encounter_id = ? ORDER BY initiative DESC').all(encounterId).map((c: any) => ({
+        ...c, stats: JSON.parse(c.stats || '{}'), actions: JSON.parse(c.actions || '[]'),
+      }));
+
+      const sysId = uuidv4();
+      const ts = Math.floor(Date.now() / 1000);
+      const sysMsg = `⚔️ Encounter "${enc.name}" has begun! Round 1`;
+      db.prepare('INSERT INTO chat_messages (id, game_id, user_id, username, type, content, metadata, created_at) VALUES (?,?,?,?,?,?,?,?)').run(
+        sysId, socket.gameId, null, 'System', 'system', sysMsg, '{}', ts
+      );
+      io.to(`game:${socket.gameId}`).emit('chat_message', { id: sysId, game_id: socket.gameId, user_id: null, username: 'System', type: 'system', content: sysMsg, metadata: {}, created_at: ts });
+      io.to(`game:${socket.gameId}`).emit('encounter_started', { encounterId, name: enc.name, combatants, round: 1 });
+    });
+
+    socket.on('encounter_update', ({ encounterId, combatantId, current_hp, initiative, status }: any) => {
+      if (!socket.gameId || !socket.isDM) return;
+      db.prepare('UPDATE encounter_combatants SET current_hp=COALESCE(?,current_hp), initiative=COALESCE(?,initiative), status=COALESCE(?,status) WHERE id=? AND encounter_id=?').run(
+        current_hp ?? null, initiative ?? null, status ?? null, combatantId, encounterId
+      );
+      io.to(`game:${socket.gameId}`).emit('encounter_combatant_updated', { encounterId, combatantId, current_hp, initiative, status });
+    });
+
+    socket.on('encounter_next_round', ({ encounterId }: any) => {
+      if (!socket.gameId || !socket.isDM) return;
+      const enc = db.prepare('SELECT * FROM encounters WHERE id = ? AND game_id = ?').get(encounterId, socket.gameId) as any;
+      if (!enc) return;
+      const newRound = enc.round + 1;
+      db.prepare('UPDATE encounters SET round = ? WHERE id = ?').run(newRound, encounterId);
+      const sysId = uuidv4(); const ts = Math.floor(Date.now() / 1000);
+      const sysMsg = `🔔 Round ${newRound} begins!`;
+      db.prepare('INSERT INTO chat_messages (id, game_id, user_id, username, type, content, metadata, created_at) VALUES (?,?,?,?,?,?,?,?)').run(sysId, socket.gameId, null, 'System', 'system', sysMsg, '{}', ts);
+      io.to(`game:${socket.gameId}`).emit('chat_message', { id: sysId, game_id: socket.gameId, user_id: null, username: 'System', type: 'system', content: sysMsg, metadata: {}, created_at: ts });
+      io.to(`game:${socket.gameId}`).emit('encounter_round', { encounterId, round: newRound });
+    });
+
+    socket.on('encounter_end', ({ encounterId }: any) => {
+      if (!socket.gameId || !socket.isDM) return;
+      const enc = db.prepare('SELECT * FROM encounters WHERE id = ? AND game_id = ?').get(encounterId, socket.gameId) as any;
+      if (!enc) return;
+      db.prepare("UPDATE encounters SET status = 'completed' WHERE id = ?").run(encounterId);
+      const sysId = uuidv4(); const ts = Math.floor(Date.now() / 1000);
+      const sysMsg = `✅ Encounter "${enc.name}" has ended.`;
+      db.prepare('INSERT INTO chat_messages (id, game_id, user_id, username, type, content, metadata, created_at) VALUES (?,?,?,?,?,?,?,?)').run(sysId, socket.gameId, null, 'System', 'system', sysMsg, '{}', ts);
+      io.to(`game:${socket.gameId}`).emit('chat_message', { id: sysId, game_id: socket.gameId, user_id: null, username: 'System', type: 'system', content: sysMsg, metadata: {}, created_at: ts });
+      io.to(`game:${socket.gameId}`).emit('encounter_ended', { encounterId });
+    });
+
+    socket.on('encounter_attack_roll', ({ encounterId, attackerName, targetName, notation, attackBonus, damageDice, attackTotal, damageTotal, hit }: any) => {
+      if (!socket.gameId || !socket.isDM) return;
+      const id = uuidv4(); const ts = Math.floor(Date.now() / 1000);
+      const metadata = { notation, results: [attackTotal], total: attackTotal, attackBonus, damageDice, damageTotal, hit, attackerName, targetName, isAttack: true };
+      const content = hit
+        ? `${attackerName} hits ${targetName}! Attack: ${attackTotal} | Damage: ${damageTotal}`
+        : `${attackerName} misses ${targetName}. (Attack roll: ${attackTotal})`;
+      db.prepare('INSERT INTO chat_messages (id, game_id, user_id, username, type, content, metadata, created_at) VALUES (?,?,?,?,?,?,?,?)').run(
+        id, socket.gameId, socket.user!.id, socket.user!.username, 'roll', content, JSON.stringify(metadata), ts
+      );
+      io.to(`game:${socket.gameId}`).emit('chat_message', { id, game_id: socket.gameId, user_id: socket.user!.id, username: socket.user!.username, type: 'roll', content, metadata, created_at: ts });
+    });
+
     socket.on('disconnect', () => {
       if (socket.gameId) {
         io.to(`game:${socket.gameId}`).emit('player_left', {
