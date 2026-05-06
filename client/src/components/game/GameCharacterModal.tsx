@@ -2,6 +2,7 @@ import { useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../../lib/api';
 import { X, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { getRaceAvatar, avatarStyle } from '../../lib/avatars';
 
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const ABILITY_NAMES: Record<string, string> = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
@@ -26,6 +27,14 @@ function emptySheet() {
     combat: { ac: 10, initiative: 0, speed: 30, max_hp: 10, current_hp: 10, temp_hp: 0, hit_dice: '1d8', death_saves: { successes: 0, failures: 0 } },
     saving_throws: {}, skills: {},
     features: [] as string[], equipment: [] as string[],
+    spellcasting: {
+      ability: '',
+      slots: {
+        1:{max:0,used:0}, 2:{max:0,used:0}, 3:{max:0,used:0},
+        4:{max:0,used:0}, 5:{max:0,used:0}, 6:{max:0,used:0},
+        7:{max:0,used:0}, 8:{max:0,used:0}, 9:{max:0,used:0},
+      },
+    },
     spells: { cantrips: [], level1: [], level2: [], level3: [], level4: [], level5: [], level6: [], level7: [], level8: [], level9: [] },
     notes: '', backstory: '',
   };
@@ -116,6 +125,17 @@ export default function GameCharacterModal({ gameId, character, onClose, onSaved
           <div className="space-y-3">
             <Section title="Identity">
               <div className="space-y-2">
+                {/* Race-based avatar preview */}
+                {(() => {
+                  const def = getRaceAvatar(sheet.race || '');
+                  return (
+                    <div className="flex justify-center mb-1">
+                      <div className="w-16 h-16 rounded-full flex items-center justify-center text-3xl" style={avatarStyle(def)}>
+                        {def.emoji}
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div>
                   <label className="label block mb-1">Name *</label>
                   <input className="tavern-input text-sm" placeholder="Thorin Ironfist" value={sheet.name || ''} onChange={(e) => set('name', e.target.value)} />
@@ -274,10 +294,58 @@ export default function GameCharacterModal({ gameId, character, onClose, onSaved
               />
             </Section>
 
-            <Section title="Spells (cantrips + levels 1-5)">
-              {(['cantrips', 'level1', 'level2', 'level3', 'level4', 'level5'] as const).map((lvl) => (
+            <Section title="Spellcasting">
+              <div className="mb-3">
+                <label className="label block mb-1">Spellcasting Ability</label>
+                <select className="tavern-input text-sm" value={sheet.spellcasting?.ability || ''}
+                  onChange={(e) => set('spellcasting.ability', e.target.value)}>
+                  <option value="">— None —</option>
+                  <option value="int">Intelligence (INT)</option>
+                  <option value="wis">Wisdom (WIS)</option>
+                  <option value="cha">Charisma (CHA)</option>
+                </select>
+              </div>
+              {sheet.spellcasting?.ability && (
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="flex flex-col items-center bg-tavern-bg border border-tavern-border rounded p-2 gap-1">
+                    <span className="label text-[10px]">Spell Save DC</span>
+                    <span className="text-tavern-text text-lg font-bold font-serif">
+                      {8 + pb + Math.floor(((sheet.stats?.[sheet.spellcasting.ability] ?? 10) - 10) / 2)}
+                    </span>
+                  </div>
+                  <div className="flex flex-col items-center bg-tavern-bg border border-tavern-border rounded p-2 gap-1">
+                    <span className="label text-[10px]">Spell Attack</span>
+                    <span className="text-tavern-gold text-lg font-bold font-serif">
+                      {(() => { const m = Math.floor(((sheet.stats?.[sheet.spellcasting.ability] ?? 10) - 10) / 2); return (pb + m) >= 0 ? `+${pb + m}` : `${pb + m}`; })()}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <label className="label block mb-1">Spell Slots (Max / Used)</label>
+              <div className="grid grid-cols-3 gap-1 mb-3">
+                {([1,2,3,4,5,6,7,8,9] as const).map(lvl => {
+                  const slot = sheet.spellcasting?.slots?.[lvl] || { max: 0, used: 0 };
+                  return (
+                    <div key={lvl} className="flex flex-col items-center bg-tavern-bg border border-tavern-border rounded p-1.5 gap-0.5">
+                      <span className="label text-[9px]">Lv {lvl}</span>
+                      <div className="flex items-center gap-1">
+                        <input type="number" min={0} max={9}
+                          className="w-6 text-center bg-transparent text-tavern-text font-bold outline-none border-b border-tavern-border/50 text-sm"
+                          value={slot.max}
+                          onChange={(e) => set(`spellcasting.slots.${lvl}.max`, parseInt(e.target.value) || 0)} />
+                        <span className="text-tavern-muted text-xs">/</span>
+                        <input type="number" min={0} max={9}
+                          className="w-6 text-center bg-transparent text-tavern-muted outline-none border-b border-tavern-border/50 text-sm"
+                          value={slot.used}
+                          onChange={(e) => set(`spellcasting.slots.${lvl}.used`, parseInt(e.target.value) || 0)} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {(['cantrips', 'level1', 'level2', 'level3', 'level4', 'level5', 'level6', 'level7', 'level8', 'level9'] as const).map((lvl) => (
                 <div key={lvl} className="mb-2">
-                  <label className="label block mb-1 capitalize">{lvl === 'cantrips' ? 'Cantrips' : `Level ${lvl.slice(5)}`}</label>
+                  <label className="label block mb-1 capitalize">{lvl === 'cantrips' ? 'Cantrips' : `Level ${lvl.slice(5)} Spells`}</label>
                   <input
                     className="tavern-input text-xs py-1"
                     placeholder="Comma separated..."

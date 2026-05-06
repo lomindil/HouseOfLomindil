@@ -4,6 +4,7 @@ import { useGameStore } from '../../store/game';
 import { useAuthStore } from '../../store/auth';
 import clsx from 'clsx';
 import { RefreshCw } from 'lucide-react';
+import { getRaceAvatar, avatarStyle } from '../../lib/avatars';
 
 interface PartyMember {
   user_id: string;
@@ -107,10 +108,17 @@ export default function PartyPanel({ gameId, isDM }: { gameId: string; isDM: boo
             className={clsx('rounded border p-2 text-sm', isSelf ? 'border-tavern-gold/40 bg-tavern-gold/5' : 'border-tavern-border bg-tavern-bg/30')}
           >
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-tavern-bg border border-tavern-border overflow-hidden flex items-center justify-center flex-shrink-0">
+              <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0">
                 {m.avatar_url
                   ? <img src={m.avatar_url} alt="" className="w-full h-full object-cover" />
-                  : <span className="text-base">👤</span>}
+                  : (() => {
+                      const def = getRaceAvatar(m.sheet_data?.race || '');
+                      return (
+                        <div className="w-full h-full rounded-full flex items-center justify-center text-lg" style={avatarStyle(def)}>
+                          {def.emoji}
+                        </div>
+                      );
+                    })()}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">

@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import * as THREE from 'three';
 import { useGameStore } from '../../store/game';
 import clsx from 'clsx';
 
@@ -8,231 +10,198 @@ type DieType = typeof DICE[number];
 function roll(sides: number) { return Math.floor(Math.random() * sides) + 1; }
 
 function sidesToDie(sides: number): DieType {
-  const map: Record<number, DieType> = { 4:'d4',6:'d6',8:'d8',10:'d10',12:'d12',20:'d20',100:'d100' };
+  const map: Record<number, DieType> = { 4:'d4', 6:'d6', 8:'d8', 10:'d10', 12:'d12', 20:'d20', 100:'d100' };
   return map[sides] || 'd6';
 }
 
 function parseNotation(notation: string) {
   const cleaned = notation.trim().replace(/\s/g, '');
-  const diceTokens = cleaned.match(/\d*d\d+/gi) || [];
-  if (!diceTokens.length) return null;
-  const dice = diceTokens.map(t => {
+  const tokens = cleaned.match(/\d*d\d+/gi) || [];
+  if (!tokens.length) return null;
+  const dice = tokens.map(t => {
     const [c, s] = t.toLowerCase().split('d');
     return { count: parseInt(c || '1'), sides: parseInt(s) };
   });
   const modMatch = cleaned.match(/([+-]\d+)$/);
-  const modifier = modMatch ? parseInt(modMatch[1]) : 0;
-  return { dice, modifier };
+  return { dice, modifier: modMatch ? parseInt(modMatch[1]) : 0 };
 }
 
-// ─── Die geometry (60×60 viewBox) ─────────────────────────────────────────────
-// Each die has layered face polygons rendered back→front with gradient fills.
-// Light source: upper-left. Faces: light (top), mid (right), dark (left/bottom).
+// ─── Geometry (module-level cache — disposable geometries) ─────────────────
+const geoCache: Partial<Record<DieType, THREE.BufferGeometry>> = {};
 
-const DIE_DEFS: Record<DieType, {
-  viewBox: string;
-  faces: { points: string; shade: 'light'|'mid'|'dark' }[];
-  edges: string;    // stroke-only border path
-  textX: number; textY: number;
-}> = {
-  // Tetrahedron: outer triangle + Y-lines from centroid (30,36)
-  d4: {
-    viewBox:'0 0 60 58',
-    faces:[
-      { points:'30,4 54,52 30,36',  shade:'light' },  // right face
-      { points:'6,52 54,52 30,36',  shade:'dark'  },  // bottom face
-      { points:'6,52 30,4  30,36',  shade:'mid'   },  // left face
-    ],
-    edges:'M30,4 L54,52 L6,52 Z M30,36 L30,4 M30,36 L54,52 M30,36 L6,52',
-    textX:30, textY:34,
-  },
-  // Isometric cube: 3 visible parallelogram faces
-  d6: {
-    viewBox:'0 0 60 60',
-    faces:[
-      { points:'30,4 52,17 30,30 8,17',  shade:'light' },  // top
-      { points:'52,17 52,43 30,56 30,30', shade:'mid'   },  // right
-      { points:'8,17 30,30 30,56 8,43',  shade:'dark'   },  // left
-    ],
-    edges:'M30,4 L52,17 L52,43 L30,56 L8,43 L8,17 Z M30,30 L30,4 M30,30 L52,17 M30,30 L8,17',
-    textX:38, textY:40,
-  },
-  // Octahedron: 4 triangular faces (diamond + cross)
-  d8: {
-    viewBox:'0 0 60 60',
-    faces:[
-      { points:'30,4 54,30 30,30',  shade:'light' },
-      { points:'30,4 6,30 30,30',   shade:'mid'   },
-      { points:'54,30 30,56 30,30', shade:'mid'   },
-      { points:'6,30 30,56 30,30',  shade:'dark'  },
-    ],
-    edges:'M30,4 L54,30 L30,56 L6,30 Z M30,4 L30,56 M6,30 L54,30',
-    textX:30, textY:30,
-  },
-  // d10: 5-face kite / pentagonal view
-  d10: {
-    viewBox:'0 0 60 60',
-    faces:[
-      { points:'30,5 51,22 30,28',  shade:'light'  },
-      { points:'51,22 42,50 30,28', shade:'mid'    },
-      { points:'42,50 18,50 30,28', shade:'dark'   },
-      { points:'18,50 9,22 30,28',  shade:'dark'   },
-      { points:'9,22 30,5 30,28',   shade:'mid'    },
-    ],
-    edges:'M30,5 L51,22 L42,50 L18,50 L9,22 Z M30,28 L30,5 M30,28 L51,22 M30,28 L42,50 M30,28 L18,50 M30,28 L9,22',
-    textX:30, textY:32,
-  },
-  // d12: pentagon + inner pentagon (dodecahedron face)
-  d12: {
-    viewBox:'0 0 60 60',
-    faces:[
-      { points:'30,4 53,20 30,14 7,20',  shade:'light' }, // top bridge
-      { points:'53,20 46,50 39,44 30,14', shade:'mid'   },
-      { points:'46,50 14,50 21,44 39,44', shade:'dark'  },
-      { points:'14,50 7,20 21,44',        shade:'dark'  },
-      { points:'30,14 39,44 21,44',       shade:'mid'   }, // inner pentagon center
-    ],
-    edges:'M30,4 L53,20 L46,50 L14,50 L7,20 Z M30,14 L39,44 L21,44 Z M30,4 L30,14 M53,20 L39,44 M46,50 L39,44 M14,50 L21,44 M7,20 L21,44',
-    textX:30, textY:34,
-  },
-  // d20: classic 4-triangle icosahedron face pattern
-  d20: {
-    viewBox:'0 0 60 56',
-    faces:[
-      { points:'30,4 43,27 17,27',    shade:'light' },  // top small △
-      { points:'56,52 43,27 30,52',   shade:'mid'   },  // bottom-right △
-      { points:'4,52 17,27 30,52',    shade:'dark'  },  // bottom-left △
-      { points:'17,27 43,27 30,52',   shade:'mid'   },  // center inverted △
-    ],
-    edges:'M30,4 L56,52 L4,52 Z M17,27 L43,27 L30,52 Z M30,4 L17,27 M30,4 L43,27 M56,52 L43,27 M4,52 L17,27 M56,52 L30,52 M4,52 L30,52',
-    textX:30, textY:34,
-  },
-  // d100: same geometry as d10 but labelled %
-  d100: {
-    viewBox:'0 0 60 60',
-    faces:[
-      { points:'30,5 51,22 30,28',  shade:'light'  },
-      { points:'51,22 42,50 30,28', shade:'mid'    },
-      { points:'42,50 18,50 30,28', shade:'dark'   },
-      { points:'18,50 9,22 30,28',  shade:'dark'   },
-      { points:'9,22 30,5 30,28',   shade:'mid'    },
-    ],
-    edges:'M30,5 L51,22 L42,50 L18,50 L9,22 Z M30,28 L30,5 M30,28 L51,22 M30,28 L42,50 M30,28 L18,50 M30,28 L9,22',
-    textX:30, textY:32,
-  },
-};
+function buildD10(): THREE.BufferGeometry {
+  const n = 5;
+  const verts: number[] = [];
+  const idx: number[] = [];
+  verts.push(0, 1.1, 0);                                                  // 0: top apex
+  for (let i = 0; i < n; i++) {                                            // 1–5: upper ring
+    const a = (i / n) * Math.PI * 2 + Math.PI / n;
+    verts.push(0.9 * Math.cos(a), 0.1, 0.9 * Math.sin(a));
+  }
+  for (let i = 0; i < n; i++) {                                            // 6–10: lower ring
+    const a = (i / n) * Math.PI * 2;
+    verts.push(0.9 * Math.cos(a), -0.1, 0.9 * Math.sin(a));
+  }
+  verts.push(0, -1.1, 0);                                                  // 11: bottom apex
+  for (let i = 0; i < n; i++) idx.push(0, 1 + i, 1 + (i + 1) % n);      // top fan
+  for (let i = 0; i < n; i++) {                                            // kite band
+    const a = 1 + i, b = 1 + (i + 1) % n, c = 6 + i, d = 6 + (i + 1) % n;
+    idx.push(a, b, c); idx.push(b, d, c);
+  }
+  for (let i = 0; i < n; i++) idx.push(11, 6 + (i + 1) % n, 6 + i);     // bottom fan
+  const geo = new THREE.BufferGeometry();
+  geo.setIndex(idx);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.computeVertexNormals();
+  return geo;
+}
 
-// ─── Colour palettes ────────────────────────────────────────────────────────────
-const PALETTE = {
-  normal: {
-    light:'#4a2e12', mid:'#2e1b0a', dark:'#1c0e05',
-    edge:'#7a5010', glow:'none', text:'#f0d090',
-  },
-  max: {
-    light:'#c8930a', mid:'#8b6206', dark:'#5a3d00',
-    edge:'#ffe066', glow:'drop-shadow(0 0 6px #ffd700)', text:'#fff8c0',
-  },
-  min: {
-    light:'#7f1010', mid:'#4d0808', dark:'#280404',
-    edge:'#cc2222', glow:'drop-shadow(0 0 5px #ef4444)', text:'#ffbaba',
-  },
-};
+function getGeo(die: DieType): THREE.BufferGeometry {
+  if (!geoCache[die]) {
+    switch (die) {
+      case 'd4':   geoCache.d4   = new THREE.TetrahedronGeometry(1.05);   break;
+      case 'd6':   geoCache.d6   = new THREE.BoxGeometry(1.3, 1.3, 1.3);  break;
+      case 'd8':   geoCache.d8   = new THREE.OctahedronGeometry(1.1);      break;
+      case 'd10':  geoCache.d10  = buildD10();                             break;
+      case 'd12':  geoCache.d12  = new THREE.DodecahedronGeometry(1.0);    break;
+      case 'd20':  geoCache.d20  = new THREE.IcosahedronGeometry(1.1);     break;
+      case 'd100': geoCache.d100 = buildD10();                             break;
+    }
+  }
+  return geoCache[die]!;
+}
 
-// ─── Die3D component ────────────────────────────────────────────────────────────
+// ─── Die mesh (inside Canvas) ──────────────────────────────────────────────
 type PhaseState = 'idle' | 'tumbling' | 'landing';
 
-interface Die3DProps {
+function DiceMesh({ die, phase, position, isMax, isMin }: {
   die: DieType;
-  result?: number;
-  maxVal: number;
   phase: PhaseState;
-  size?: number;
-}
+  position: [number, number, number];
+  isMax?: boolean;
+  isMin?: boolean;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null!);
+  const vel = useRef({ x: 0, y: 0, z: 0 });
 
-function Die3D({ die, result, maxVal, phase, size = 52 }: Die3DProps) {
-  const def = DIE_DEFS[die];
-  const isMax = result !== undefined && result === maxVal;
-  const isMin = result !== undefined && result === 1 && maxVal > 1;
-  const pal = isMax ? PALETTE.max : isMin ? PALETTE.min : PALETTE.normal;
+  useEffect(() => {
+    if (phase === 'tumbling') {
+      vel.current = {
+        x: (Math.random() > 0.5 ? 1 : -1) * (10 + Math.random() * 8),
+        y: (Math.random() > 0.5 ? 1 : -1) * (14 + Math.random() * 10),
+        z: (Math.random() > 0.5 ? 1 : -1) * (6  + Math.random() * 6),
+      };
+    }
+  }, [phase]);
 
-  const gradId = `g-${die}-${isMax?'max':isMin?'min':'norm'}`;
+  useFrame((_, dt) => {
+    if (!meshRef.current) return;
+    if (phase === 'tumbling') {
+      meshRef.current.rotation.x += vel.current.x * dt;
+      meshRef.current.rotation.y += vel.current.y * dt;
+      meshRef.current.rotation.z += vel.current.z * dt;
+    } else if (phase === 'landing') {
+      vel.current.x *= 0.87;
+      vel.current.y *= 0.87;
+      vel.current.z *= 0.87;
+      meshRef.current.rotation.x += vel.current.x * dt;
+      meshRef.current.rotation.y += vel.current.y * dt;
+      meshRef.current.rotation.z += vel.current.z * dt;
+    }
+  });
+
+  const color   = isMax ? '#c8930a' : isMin ? '#7f1010' : '#5a3510';
+  const emissive= isMax ? '#441e00' : isMin ? '#2a0505' : '#1c0900';
+  const specular = isMax ? '#ffcc44' : isMin ? '#aa2222' : '#996622';
 
   return (
-    <div
-      className={clsx(
-        'select-none',
-        phase === 'tumbling' && 'die-tumbling',
-        phase === 'landing'  && 'die-landing',
-      )}
-      style={{ display:'inline-block', lineHeight:0, filter: pal.glow }}
-    >
-      <svg
-        viewBox={def.viewBox}
-        width={size}
-        height={size}
-        style={{ display:'block', overflow:'visible' }}
-      >
-        <defs>
-          <radialGradient id={`${gradId}-l`} cx="30%" cy="25%" r="70%">
-            <stop offset="0%" stopColor={pal.light} stopOpacity="1" />
-            <stop offset="100%" stopColor={pal.dark}  stopOpacity="1" />
-          </radialGradient>
-          <radialGradient id={`${gradId}-m`} cx="40%" cy="30%" r="70%">
-            <stop offset="0%" stopColor={pal.mid}  stopOpacity="1" />
-            <stop offset="100%" stopColor={pal.dark} stopOpacity="1" />
-          </radialGradient>
-          <radialGradient id={`${gradId}-d`} cx="50%" cy="40%" r="65%">
-            <stop offset="0%" stopColor={pal.dark}  stopOpacity="1" />
-            <stop offset="100%" stopColor="#0a0503"  stopOpacity="1" />
-          </radialGradient>
-          <filter id={`shadow-${die}`} x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="1" dy="2" stdDeviation="2" floodColor="#000" floodOpacity="0.6" />
-          </filter>
-        </defs>
-
-        {/* Die faces */}
-        <g filter={`url(#shadow-${die})`}>
-          {def.faces.map((f, i) => (
-            <polygon
-              key={i}
-              points={f.points}
-              fill={`url(#${gradId}-${f.shade === 'light' ? 'l' : f.shade === 'mid' ? 'm' : 'd'})`}
-              stroke="none"
-            />
-          ))}
-        </g>
-
-        {/* Edge lines */}
-        <g fill="none" stroke={pal.edge} strokeWidth="1.2" strokeLinejoin="round" strokeLinecap="round" opacity="0.85">
-          {def.edges.split('M').filter(Boolean).map((seg, i) => (
-            <path key={i} d={`M${seg}`} />
-          ))}
-        </g>
-
-        {/* Result number */}
-        {result !== undefined && (
-          <text
-            x={def.textX}
-            y={def.textY}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            fontSize={result >= 100 ? 10 : result >= 10 ? 13 : 16}
-            fontWeight="bold"
-            fontFamily="serif"
-            fill={pal.text}
-            stroke="#00000060"
-            strokeWidth="0.5"
-            paintOrder="stroke"
-          >
-            {die === 'd100' && result < 10 ? `0${result}` : result}
-          </text>
-        )}
-      </svg>
-    </div>
+    <mesh ref={meshRef} position={position} geometry={getGeo(die)}>
+      <meshPhongMaterial color={color} emissive={emissive} shininess={110} specular={specular} />
+    </mesh>
   );
 }
 
-// ─── Die selector button ─────────────────────────────────────────────────────────
+// ─── Multi-die canvas ──────────────────────────────────────────────────────
+interface RollEntry { value: number; sides: number }
+
+function DiceCanvas({ rolls, phase }: { rolls: RollEntry[]; phase: PhaseState }) {
+  const spacing = 2.6;
+  const totalSpan = (rolls.length - 1) * spacing;
+  const camZ = Math.max(3.5, totalSpan / 2 + 2.8);
+
+  return (
+    <Canvas
+      key={rolls.length}
+      camera={{ position: [0, 0, camZ], fov: 50 }}
+      style={{ width: '100%', height: 120 }}
+      gl={{ antialias: true }}
+    >
+      <color attach="background" args={['#0d0805']} />
+      <ambientLight intensity={0.5} />
+      <directionalLight position={[4, 5, 5]} intensity={1.3} castShadow />
+      <pointLight position={[-4, -3, 3]} intensity={0.4} color="#cc8844" />
+      {rolls.map((r, i) => {
+        const die = sidesToDie(r.sides);
+        return (
+          <DiceMesh
+            key={i}
+            die={die}
+            phase={phase}
+            position={[i * spacing - totalSpan / 2, 0, 0]}
+            isMax={r.value === r.sides}
+            isMin={r.value === 1 && r.sides > 1}
+          />
+        );
+      })}
+    </Canvas>
+  );
+}
+
+// ─── SVG silhouettes for selector buttons ─────────────────────────────────
+function DieSVG({ die, active }: { die: DieType; active: boolean }) {
+  const stroke = active ? '#c8930a' : '#7a5010';
+  const fill   = active ? '#5a3200' : '#2e1b0a';
+  const inner  = active ? '#c8930a' : '#7a5010';
+  const s = 34;
+  switch (die) {
+    case 'd4':
+      return <svg width={s} height={s} viewBox="0 0 40 38"><polygon points="20,2 38,35 2,35" fill={fill} stroke={stroke} strokeWidth="1.5" /></svg>;
+    case 'd6':
+      return <svg width={s} height={s} viewBox="0 0 36 36">
+        <rect x="3" y="3" width="30" height="30" rx="3" fill={fill} stroke={stroke} strokeWidth="1.5" />
+        <circle cx="11" cy="11" r="2.5" fill={inner} opacity="0.7" />
+        <circle cx="25" cy="25" r="2.5" fill={inner} opacity="0.7" />
+        <circle cx="11" cy="25" r="2.5" fill={inner} opacity="0.5" />
+        <circle cx="25" cy="11" r="2.5" fill={inner} opacity="0.5" />
+      </svg>;
+    case 'd8':
+      return <svg width={s} height={s} viewBox="0 0 40 44">
+        <polygon points="20,2 38,22 20,42 2,22" fill={fill} stroke={stroke} strokeWidth="1.5" />
+        <line x1="2" y1="22" x2="38" y2="22" stroke={inner} strokeWidth="0.8" opacity="0.6" />
+        <line x1="20" y1="2"  x2="20" y2="42" stroke={inner} strokeWidth="0.8" opacity="0.6" />
+      </svg>;
+    case 'd10':
+      return <svg width={s} height={s} viewBox="0 0 40 44"><polygon points="20,2 38,18 32,40 8,40 2,18" fill={fill} stroke={stroke} strokeWidth="1.5" /></svg>;
+    case 'd12':
+      return <svg width={s} height={s} viewBox="0 0 44 44"><polygon points="22,2 40,10 44,30 30,42 14,42 0,30 4,10" fill={fill} stroke={stroke} strokeWidth="1.5" /></svg>;
+    case 'd20':
+      return <svg width={s} height={s} viewBox="0 0 44 42">
+        <polygon points="22,2 44,40 0,40" fill={fill} stroke={stroke} strokeWidth="1.5" />
+        <line x1="22" y1="2"  x2="11" y2="40" stroke={inner} strokeWidth="0.7" opacity="0.7" />
+        <line x1="22" y1="2"  x2="33" y2="40" stroke={inner} strokeWidth="0.7" opacity="0.7" />
+        <line x1="11" y1="28" x2="33" y2="28" stroke={inner} strokeWidth="0.7" opacity="0.7" />
+      </svg>;
+    case 'd100':
+      return <svg width={s} height={s} viewBox="0 0 40 44">
+        <polygon points="20,2 38,18 32,40 8,40 2,18" fill={fill} stroke={stroke} strokeWidth="1.5" />
+        <text x="20" y="27" textAnchor="middle" fontSize="9" fill={inner} fontFamily="serif" opacity="0.9">%</text>
+      </svg>;
+    default:
+      return <svg width={s} height={s} viewBox="0 0 36 36"><rect x="3" y="3" width="30" height="30" rx="3" fill={fill} stroke={stroke} strokeWidth="1.5" /></svg>;
+  }
+}
+
+// ─── Die selector button ──────────────────────────────────────────────────
 function DieButton({ die, count, onClick }: { die: DieType; count: number; onClick: () => void }) {
   return (
     <button
@@ -240,10 +209,12 @@ function DieButton({ die, count, onClick }: { die: DieType; count: number; onCli
       title={`Add ${die}`}
       className={clsx(
         'relative flex flex-col items-center justify-center py-2 rounded border transition-all select-none hover:-translate-y-0.5 active:translate-y-0',
-        count > 0 ? 'border-tavern-gold bg-tavern-gold/10' : 'border-tavern-border hover:border-tavern-gold/50 bg-tavern-bg/40'
+        count > 0
+          ? 'border-tavern-gold bg-tavern-gold/10'
+          : 'border-tavern-border hover:border-tavern-gold/50 bg-tavern-bg/40'
       )}
     >
-      <Die3D die={die} maxVal={parseInt(die.replace('d',''))} size={36} phase="idle" />
+      <DieSVG die={die} active={count > 0} />
       <span className="text-[10px] font-serif mt-0.5 text-tavern-muted leading-none">{die}</span>
       {count > 0 && (
         <span className="absolute -top-1.5 -right-1.5 bg-tavern-gold text-tavern-bg text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none z-10">
@@ -254,51 +225,63 @@ function DieButton({ die, count, onClick }: { die: DieType; count: number; onCli
   );
 }
 
-// ─── Roll result display ─────────────────────────────────────────────────────────
-interface RollEntry { value: number; sides: number }
+// ─── Roll result display ──────────────────────────────────────────────────
 interface RollResult { notation: string; rolls: RollEntry[]; modifier: number; total: number }
 
 function RollResultDisplay({ result, phase }: { result: RollResult; phase: PhaseState }) {
   return (
     <div className={clsx(
-      'p-3 rounded-lg border bg-tavern-bg/80',
+      'rounded-lg border overflow-hidden',
       phase !== 'idle' ? 'border-tavern-gold/60' : 'border-tavern-border',
     )}>
-      <div className="text-[11px] text-tavern-muted text-center mb-2 font-serif tracking-wider">
+      <div className="bg-tavern-bg/80 text-[11px] text-tavern-muted text-center pt-2 pb-1 font-serif tracking-wider">
         {result.notation}
       </div>
-      <div className="flex flex-wrap gap-2 justify-center mb-2">
-        {result.rolls.map((r, i) => {
-          const die = sidesToDie(r.sides);
-          const maxVal = r.sides;
-          return (
-            <Die3D
-              key={i}
-              die={die}
-              result={r.value}
-              maxVal={maxVal}
-              phase={phase}
-              size={48}
-            />
-          );
-        })}
-      </div>
-      {result.modifier !== 0 && (
-        <div className="text-center text-xs text-tavern-muted font-serif mb-1">
-          {result.modifier > 0 ? `+${result.modifier}` : result.modifier} modifier
+
+      <Suspense fallback={
+        <div className="h-[120px] bg-[#0d0805] flex items-center justify-center text-tavern-muted text-xs">
+          Loading 3D dice...
         </div>
-      )}
-      <div className={clsx(
-        'text-center font-serif text-3xl font-bold mt-1',
-        phase !== 'idle' ? 'text-tavern-gold animate-pulse' : 'text-tavern-gold',
-      )}>
-        {result.total}
+      }>
+        <DiceCanvas rolls={result.rolls} phase={phase} />
+      </Suspense>
+
+      <div className="bg-tavern-bg/80 px-3 pt-2 pb-3">
+        <div className="flex flex-wrap gap-1.5 justify-center mb-2">
+          {result.rolls.map((r, i) => {
+            const isMax = r.value === r.sides;
+            const isMin = r.value === 1 && r.sides > 1;
+            return (
+              <span key={i} className={clsx(
+                'text-xs font-serif font-bold rounded px-1.5 py-0.5 border',
+                isMax ? 'text-yellow-300 border-yellow-600/50 bg-yellow-900/20' :
+                isMin ? 'text-red-400   border-red-600/40   bg-red-900/20'    :
+                        'text-tavern-text border-tavern-border/60 bg-tavern-bg',
+              )}>
+                {sidesToDie(r.sides)}: {r.value}
+              </span>
+            );
+          })}
+        </div>
+
+        {result.modifier !== 0 && (
+          <div className="text-center text-xs text-tavern-muted font-serif mb-1">
+            {result.modifier > 0 ? `+${result.modifier}` : result.modifier} modifier
+          </div>
+        )}
+
+        <div className={clsx(
+          'text-center font-serif text-3xl font-bold',
+          phase !== 'idle' ? 'text-tavern-gold animate-pulse' : 'text-tavern-gold',
+        )}>
+          {result.total}
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Main DiceRoller ─────────────────────────────────────────────────────────────
+// ─── Main DiceRoller ──────────────────────────────────────────────────────
 export default function DiceRoller() {
   const { socket } = useGameStore();
   const [counts,     setCounts]     = useState<Record<string, number>>({});
@@ -309,7 +292,7 @@ export default function DiceRoller() {
   const phaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function buildNotation() {
-    const parts = Object.entries(counts).filter(([,c]) => c > 0).map(([d,c]) => `${c}${d}`);
+    const parts = Object.entries(counts).filter(([, c]) => c > 0).map(([d, c]) => `${c}${d}`);
     if (!parts.length) return '';
     let n = parts.join('+');
     if (modifier > 0) n += `+${modifier}`;
@@ -332,8 +315,8 @@ export default function DiceRoller() {
     setPhase('tumbling');
     phaseTimer.current = setTimeout(() => {
       setPhase('landing');
-      phaseTimer.current = setTimeout(() => setPhase('idle'), 500);
-    }, 750);
+      phaseTimer.current = setTimeout(() => setPhase('idle'), 600);
+    }, 900);
 
     socket?.emit('dice_roll', { notation, results: rolls.map(r => r.value), total });
   }
@@ -352,12 +335,11 @@ export default function DiceRoller() {
     setCustom('');
   }
 
-  // cleanup timer on unmount
   useEffect(() => () => { if (phaseTimer.current) clearTimeout(phaseTimer.current); }, []);
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Die grid */}
+      {/* Die selector grid */}
       <div className="grid grid-cols-4 gap-1.5">
         {DICE.map(die => (
           <DieButton
@@ -386,7 +368,7 @@ export default function DiceRoller() {
         {phase !== 'idle' ? 'Rolling...' : `Roll ${buildNotation() || '—'}`}
       </button>
 
-      {/* Custom notation */}
+      {/* Custom notation input */}
       <div className="flex gap-2">
         <input
           className="tavern-input text-sm py-1.5 flex-1"
@@ -398,7 +380,7 @@ export default function DiceRoller() {
         <button onClick={rollCustom} disabled={!custom.trim()} className="btn-secondary text-xs py-1.5 px-3">Roll</button>
       </div>
 
-      {/* Result */}
+      {/* 3D result */}
       {lastResult && <RollResultDisplay result={lastResult} phase={phase} />}
     </div>
   );

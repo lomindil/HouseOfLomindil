@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Navbar from '../components/ui/Navbar';
 import api from '../lib/api';
-import { Save, Upload, ChevronDown, ChevronUp, Camera } from 'lucide-react';
+import { Save, ChevronDown, ChevronUp, Camera } from 'lucide-react';
+import { getRaceAvatar, avatarStyle } from '../lib/avatars';
 
 const ABILITIES = ['str', 'dex', 'con', 'int', 'wis', 'cha'] as const;
 const ABILITY_NAMES: Record<string, string> = { str: 'STR', dex: 'DEX', con: 'CON', int: 'INT', wis: 'WIS', cha: 'CHA' };
@@ -139,9 +140,14 @@ export default function CharacterEditPage() {
               >
                 {avatarUrl ? (
                   <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-4xl">🧙</span>
-                )}
+                ) : (() => {
+                  const def = getRaceAvatar(sheet.race || '');
+                  return (
+                    <div className="w-full h-full rounded-full flex items-center justify-center text-4xl" style={avatarStyle(def)}>
+                      {def.emoji}
+                    </div>
+                  );
+                })()}
                 <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                   <Camera size={20} className="text-white" />
                 </div>
@@ -353,6 +359,60 @@ export default function CharacterEditPage() {
               </div>
             </Section>
 
+            {/* Spellcasting */}
+            <Section title="Spellcasting">
+              <div className="mb-3">
+                <label className="label block mb-1">Spellcasting Ability</label>
+                <select className="tavern-input" value={sheet.spellcasting?.ability || ''}
+                  onChange={(e) => set('spellcasting.ability', e.target.value)}>
+                  <option value="">— None —</option>
+                  <option value="int">Intelligence (INT)</option>
+                  <option value="wis">Wisdom (WIS)</option>
+                  <option value="cha">Charisma (CHA)</option>
+                </select>
+              </div>
+              {sheet.spellcasting?.ability && (
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="stat-box">
+                    <span className="label">Spell Save DC</span>
+                    <span className="text-tavern-text text-xl font-bold font-serif">
+                      {8 + pb + mod(sheet.stats?.[sheet.spellcasting.ability] ?? 10)}
+                    </span>
+                  </div>
+                  <div className="stat-box">
+                    <span className="label">Spell Attack</span>
+                    <span className="text-tavern-gold text-xl font-bold font-serif">
+                      {fmtMod(pb + mod(sheet.stats?.[sheet.spellcasting.ability] ?? 10))}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="label block mb-2">Spell Slots (Max / Used)</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([1,2,3,4,5,6,7,8,9] as const).map(lvl => {
+                    const slot = sheet.spellcasting?.slots?.[lvl] || { max: 0, used: 0 };
+                    return (
+                      <div key={lvl} className="stat-box gap-0.5 py-1.5">
+                        <span className="label text-[9px]">Level {lvl}</span>
+                        <div className="flex items-center gap-1">
+                          <input type="number" min={0} max={9}
+                            className="w-7 text-center bg-transparent text-tavern-text font-bold font-serif outline-none border-b border-tavern-border/50 focus:border-tavern-gold text-sm"
+                            value={slot.max}
+                            onChange={(e) => set(`spellcasting.slots.${lvl}.max`, parseInt(e.target.value) || 0)} />
+                          <span className="text-tavern-muted text-xs">/</span>
+                          <input type="number" min={0} max={9}
+                            className="w-7 text-center bg-transparent text-tavern-muted outline-none border-b border-tavern-border/50 focus:border-tavern-gold text-sm"
+                            value={slot.used}
+                            onChange={(e) => set(`spellcasting.slots.${lvl}.used`, parseInt(e.target.value) || 0)} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </Section>
+
             {/* Traits */}
             <Section title="Personality">
               {[
@@ -410,6 +470,14 @@ function emptySheet() {
     },
     combat: { ac: 10, initiative: 0, speed: 30, max_hp: 10, current_hp: 10, temp_hp: 0, hit_dice: '1d8', death_saves: { successes: 0, failures: 0 } },
     attacks: [],
+    spellcasting: {
+      ability: '',
+      slots: {
+        1: {max:0,used:0}, 2:{max:0,used:0}, 3:{max:0,used:0},
+        4:{max:0,used:0}, 5:{max:0,used:0}, 6:{max:0,used:0},
+        7:{max:0,used:0}, 8:{max:0,used:0}, 9:{max:0,used:0},
+      },
+    },
     equipment: '', features: '',
     traits: { personality: '', ideals: '', bonds: '', flaws: '' },
     backstory: '', notes: '',

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import api from '../../lib/api';
 import { X, Save, Plus, Trash2, Camera, ChevronDown, ChevronUp } from 'lucide-react';
+import { getMonsterAvatar, avatarStyle } from '../../lib/avatars';
 
 const SIZES = ['Tiny','Small','Medium','Large','Huge','Gargantuan'];
 const TYPES = ['Aberration','Beast','Celestial','Construct','Dragon','Elemental','Fey','Fiend','Giant','Humanoid','Monstrosity','Ooze','Plant','Undead'];
@@ -145,9 +146,14 @@ export default function MonsterFormModal({ gameId, monster, onClose, onSaved }: 
               >
                 {avatarUrl ? (
                   <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-3xl">👹</div>
-                )}
+                ) : (() => {
+                  const def = getMonsterAvatar(data.type || '');
+                  return (
+                    <div className="w-full h-full rounded-full flex items-center justify-center text-3xl" style={avatarStyle(def)}>
+                      {def.emoji}
+                    </div>
+                  );
+                })()}
                 <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                   <Camera size={18} className="text-white" />
                 </div>
@@ -233,6 +239,18 @@ export default function MonsterFormModal({ gameId, monster, onClose, onSaved }: 
                   <label className="label block mb-1">Languages</label>
                   <input className="tavern-input text-sm" value={data.languages} onChange={(e) => set('languages', e.target.value)} />
                 </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="label block mb-1">Spell Save DC</label>
+                    <input type="number" min={0} className="tavern-input text-sm" value={data.spell_save_dc ?? ''} placeholder="—"
+                      onChange={(e) => set('spell_save_dc', e.target.value ? parseInt(e.target.value) : null)} />
+                  </div>
+                  <div>
+                    <label className="label block mb-1">Spell Attack Bonus</label>
+                    <input type="number" className="tavern-input text-sm" value={data.spell_attack_bonus ?? ''} placeholder="—"
+                      onChange={(e) => set('spell_attack_bonus', e.target.value ? parseInt(e.target.value) : null)} />
+                  </div>
+                </div>
               </div>
             </Section>
 
@@ -315,11 +333,18 @@ export default function MonsterFormModal({ gameId, monster, onClose, onSaved }: 
                   <button onClick={() => removeEntry('actions', i)} className="absolute top-1 right-1 text-tavern-muted hover:text-red-400"><Trash2 size={11} /></button>
                   <input className="tavern-input text-xs py-0.5 mb-1 font-semibold" placeholder="Action name" value={a.name} onChange={(e) => updateEntry('actions', i, 'name', e.target.value)} />
                   <textarea className="tavern-input text-xs py-0.5 resize-none mb-1" rows={2} placeholder="Description..." value={a.desc} onChange={(e) => updateEntry('actions', i, 'desc', e.target.value)} />
-                  <label className="flex items-center gap-1.5 text-xs text-tavern-muted cursor-pointer mb-1">
-                    <input type="checkbox" className="accent-yellow-500" checked={!!a.is_attack} onChange={(e) => updateEntry('actions', i, 'is_attack', e.target.checked)} />
-                    Attack action
-                  </label>
-                  {a.is_attack && (
+                  <div className="flex items-center gap-3 mb-1">
+                    <span className="text-[10px] text-tavern-muted uppercase tracking-widest">Action type:</span>
+                    {(['none', 'attack', 'save'] as const).map(opt => (
+                      <label key={opt} className="flex items-center gap-1 text-xs cursor-pointer">
+                        <input type="radio" className="accent-yellow-500"
+                          checked={(a.action_type ?? (a.is_attack ? 'attack' : 'none')) === opt}
+                          onChange={() => updateEntry('actions', i, 'action_type', opt)} />
+                        <span className="capitalize text-tavern-muted">{opt === 'none' ? '—' : opt === 'attack' ? 'Attack Roll' : 'Spell Save'}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {(a.action_type ?? (a.is_attack ? 'attack' : 'none')) === 'attack' && (
                     <div className="grid grid-cols-3 gap-1">
                       <div>
                         <label className="label text-[9px]">To Hit</label>
@@ -330,12 +355,35 @@ export default function MonsterFormModal({ gameId, monster, onClose, onSaved }: 
                         <input className="tavern-input text-xs py-0.5" placeholder="2d6+4" value={a.damage || ''} onChange={(e) => updateEntry('actions', i, 'damage', e.target.value)} />
                       </div>
                       <div>
-                        <label className="label text-[9px]">Type</label>
+                        <label className="label text-[9px]">Dmg Type</label>
                         <input className="tavern-input text-xs py-0.5" placeholder="piercing" value={a.damage_type || ''} onChange={(e) => updateEntry('actions', i, 'damage_type', e.target.value)} />
                       </div>
                       <div className="col-span-3">
                         <label className="label text-[9px]">Reach / Range</label>
                         <input className="tavern-input text-xs py-0.5" placeholder="5 ft. or 80/320 ft." value={a.reach || ''} onChange={(e) => updateEntry('actions', i, 'reach', e.target.value)} />
+                      </div>
+                    </div>
+                  )}
+                  {(a.action_type ?? (a.is_attack ? 'attack' : 'none')) === 'save' && (
+                    <div className="grid grid-cols-3 gap-1">
+                      <div>
+                        <label className="label text-[9px]">Save DC</label>
+                        <input type="number" className="tavern-input text-xs py-0.5" placeholder="14" value={a.save_dc ?? ''} onChange={(e) => updateEntry('actions', i, 'save_dc', parseInt(e.target.value))} />
+                      </div>
+                      <div>
+                        <label className="label text-[9px]">Save Ability</label>
+                        <select className="tavern-input text-xs py-0.5" value={a.save_ability || ''} onChange={(e) => updateEntry('actions', i, 'save_ability', e.target.value)}>
+                          <option value="">—</option>
+                          {['STR','DEX','CON','INT','WIS','CHA'].map(ab => <option key={ab} value={ab}>{ab}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="label text-[9px]">Dmg Type</label>
+                        <input className="tavern-input text-xs py-0.5" placeholder="fire" value={a.damage_type || ''} onChange={(e) => updateEntry('actions', i, 'damage_type', e.target.value)} />
+                      </div>
+                      <div className="col-span-3">
+                        <label className="label text-[9px]">Damage / Effect</label>
+                        <input className="tavern-input text-xs py-0.5" placeholder="8d6 fire, half on save" value={a.damage || ''} onChange={(e) => updateEntry('actions', i, 'damage', e.target.value)} />
                       </div>
                     </div>
                   )}
