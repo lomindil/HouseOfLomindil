@@ -413,41 +413,44 @@ export default function CharacterEditPage() {
               </div>
             </Section>
 
-            {/* Traits */}
-            <Section title="Personality">
-              {[
-                { label: 'Personality Traits', path: 'traits.personality' },
-                { label: 'Ideals', path: 'traits.ideals' },
-                { label: 'Bonds', path: 'traits.bonds' },
-                { label: 'Flaws', path: 'traits.flaws' },
-              ].map(({ label, path }) => (
-                <div key={path} className="mb-3">
-                  <label className="label block mb-1">{label}</label>
-                  <textarea rows={2} className="tavern-input resize-none text-sm" value={path.split('.').reduce((o, k) => o?.[k], sheet) || ''} placeholder={label}
-                    onChange={(e) => set(path, e.target.value)} />
-                </div>
-              ))}
-            </Section>
           </div>
         </div>
 
-        {/* Full-width sections */}
+        {/* Full-width text sections */}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Section title="Equipment">
-            <textarea rows={6} className="tavern-input resize-none text-sm w-full" value={sheet.equipment || ''} placeholder="List your items..."
-              onChange={(e) => set('equipment', e.target.value)} />
-          </Section>
           <Section title="Features & Traits">
-            <textarea rows={6} className="tavern-input resize-none text-sm w-full" value={sheet.features || ''} placeholder="Class features, racial traits..."
+            <textarea rows={10} className="tavern-input resize-y text-sm w-full" value={sheet.features || ''} placeholder="Class features, racial traits..."
               onChange={(e) => set('features', e.target.value)} />
           </Section>
+          <Section title="Equipment">
+            <textarea rows={10} className="tavern-input resize-y text-sm w-full" value={sheet.equipment || ''} placeholder="List your items..."
+              onChange={(e) => set('equipment', e.target.value)} />
+          </Section>
           <Section title="Backstory">
-            <textarea rows={6} className="tavern-input resize-none text-sm w-full" value={sheet.backstory || ''} placeholder="Your character's history..."
+            <textarea rows={10} className="tavern-input resize-y text-sm w-full" value={sheet.backstory || ''} placeholder="Your character's history..."
               onChange={(e) => set('backstory', e.target.value)} />
           </Section>
           <Section title="Notes">
-            <textarea rows={6} className="tavern-input resize-none text-sm w-full" value={sheet.notes || ''} placeholder="Anything else..."
+            <textarea rows={10} className="tavern-input resize-y text-sm w-full" value={sheet.notes || ''} placeholder="Anything else..."
               onChange={(e) => set('notes', e.target.value)} />
+          </Section>
+          <Section title="Personality">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: 'Personality Traits', path: 'traits.personality' },
+                { label: 'Ideals',             path: 'traits.ideals' },
+                { label: 'Bonds',              path: 'traits.bonds' },
+                { label: 'Flaws',              path: 'traits.flaws' },
+              ].map(({ label, path }) => (
+                <div key={path}>
+                  <label className="label block mb-1">{label}</label>
+                  <textarea rows={4} className="tavern-input resize-y text-sm w-full"
+                    value={path.split('.').reduce((o: any, k: string) => o?.[k], sheet) || ''}
+                    placeholder={label}
+                    onChange={(e) => set(path, e.target.value)} />
+                </div>
+              ))}
+            </div>
           </Section>
         </div>
       </main>

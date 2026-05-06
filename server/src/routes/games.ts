@@ -175,7 +175,13 @@ router.get('/:id/game-characters', (req: AuthRequest, res: Response) => {
     db.prepare('SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?').get(req.params.id, req.user!.id);
   if (!isMember) return res.status(403).json({ error: 'Not a member' });
 
-  const chars = db.prepare('SELECT * FROM characters WHERE game_id = ? ORDER BY created_at ASC').all(req.params.id);
+  const chars = db.prepare(`
+    SELECT c.*, u.username as claimed_by_username
+    FROM characters c
+    LEFT JOIN users u ON u.id = c.claimed_by
+    WHERE c.game_id = ?
+    ORDER BY c.created_at ASC
+  `).all(req.params.id);
   res.json(chars.map((c: any) => ({ ...c, sheet_data: JSON.parse(c.sheet_data) })));
 });
 
@@ -221,7 +227,7 @@ router.delete('/:id/game-characters/:charId', (req: AuthRequest, res: Response) 
   res.json({ deleted: true });
 });
 
-// Claim a pre-built game character (player copies it to their account)
+// Claim a pre-built game character (one per character — first come first served)
 router.post('/:id/game-characters/:charId/claim', (req: AuthRequest, res: Response) => {
   const game = db.prepare('SELECT * FROM games WHERE id = ?').get(req.params.id) as any;
   if (!game) return res.status(404).json({ error: 'Not found' });
@@ -230,12 +236,31 @@ router.post('/:id/game-characters/:charId/claim', (req: AuthRequest, res: Respon
   const template = db.prepare('SELECT * FROM characters WHERE id = ? AND game_id = ?').get(req.params.charId, req.params.id) as any;
   if (!template) return res.status(404).json({ error: 'Game character not found' });
 
+  // Already claimed by this player — return their existing copy
+  if (template.claimed_by === req.user!.id) {
+    const existing = db.prepare(`
+      SELECT c.* FROM characters c
+      JOIN game_players gp ON gp.character_id = c.id
+      WHERE gp.game_id = ? AND gp.user_id = ? AND c.game_id IS NULL
+    `).get(req.params.id, req.user!.id) as any;
+    if (existing) return res.json({ ...existing, sheet_data: JSON.parse(existing.sheet_data) });
+  }
+
+  // Claimed by someone else
+  if (template.claimed_by && template.claimed_by !== req.user!.id) {
+    return res.status(409).json({ error: 'This character has already been claimed by another player' });
+  }
+
   const newId = uuidv4();
   db.prepare('INSERT INTO characters (id, user_id, name, sheet_data) VALUES (?, ?, ?, ?)').run(
     newId, req.user!.id, template.name, template.sheet_data
   );
+  if (template.avatar_url) {
+    db.prepare('UPDATE characters SET avatar_url = ? WHERE id = ?').run(template.avatar_url, newId);
+  }
 
-  // Assign to the player in this game
+  db.prepare('UPDATE characters SET claimed_by = ? WHERE id = ?').run(req.user!.id, template.id);
+
   db.prepare('INSERT INTO game_players (game_id, user_id, character_id) VALUES (?, ?, ?) ON CONFLICT(game_id, user_id) DO UPDATE SET character_id = excluded.character_id')
     .run(req.params.id, req.user!.id, newId);
 

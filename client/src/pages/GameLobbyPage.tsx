@@ -7,6 +7,7 @@ import { useAuthStore } from '../store/auth';
 import {
   Play, Copy, Users, Map, Plus, Trash2, Upload, BookOpen, Hammer,
   Pencil, Skull, Swords, History, X, Camera, ChevronDown, ChevronUp,
+  Library, Download,
 } from 'lucide-react';
 import MapBuilderModal from '../components/map/MapBuilderModal';
 import GameCharacterModal from '../components/game/GameCharacterModal';
@@ -64,6 +65,12 @@ export default function GameLobbyPage() {
   const [showMonsterModal, setShowMonsterModal] = useState(false);
   const [editingMonster, setEditingMonster] = useState<any>(null);
 
+  const [libraryMonsters, setLibraryMonsters] = useState<any[]>([]);
+  const [libraryChars, setLibraryChars] = useState<any[]>([]);
+  const [showLibraryMonsters, setShowLibraryMonsters] = useState(false);
+  const [showLibraryChars, setShowLibraryChars] = useState(false);
+  const [importingId, setImportingId] = useState<string | null>(null);
+
   const [encounters, setEncounters] = useState<any[]>([]);
   const [showEncForm, setShowEncForm] = useState(false);
   const [encName, setEncName] = useState('');
@@ -100,6 +107,8 @@ export default function GameLobbyPage() {
     if (user) {
       api.get(`/games/${id}/monsters`).then(({ data }) => setMonsters(data)).catch(() => {});
       api.get(`/games/${id}/encounters`).then(({ data }) => setEncounters(data)).catch(() => {});
+      api.get('/library/monsters').then(({ data }) => setLibraryMonsters(data)).catch(() => {});
+      api.get('/library/characters').then(({ data }) => setLibraryChars(data)).catch(() => {});
     }
   }, [id]);
 
@@ -193,6 +202,28 @@ export default function GameLobbyPage() {
     await api.delete(`/games/${id}/game-characters/${gcId}`);
     setGameCharacters(prev => prev.filter(c => c.id !== gcId));
     toast.success('Character removed');
+  }
+
+  async function importLibraryChar(templateId: string) {
+    setImportingId(templateId);
+    try {
+      const { data } = await api.post(`/library/characters/${templateId}/import/${id}`);
+      setGameCharacters(prev => [...prev, data]);
+      toast.success('Character added from library!');
+      setShowLibraryChars(false);
+    } catch (err: any) { toast.error(err?.response?.data?.error || 'Import failed'); }
+    finally { setImportingId(null); }
+  }
+
+  async function importLibraryMonster(templateId: string) {
+    setImportingId(templateId);
+    try {
+      const { data } = await api.post(`/library/monsters/${templateId}/import/${id}`);
+      setMonsters(prev => [...prev, data]);
+      toast.success('Monster added from library!');
+      setShowLibraryMonsters(false);
+    } catch (err: any) { toast.error(err?.response?.data?.error || 'Import failed'); }
+    finally { setImportingId(null); }
   }
 
   async function uploadGCAvatar(gcId: string, file: File) {
@@ -374,16 +405,30 @@ export default function GameLobbyPage() {
                 <div className="mb-3">
                   <p className="label mb-2">Pre-built by DM — claim one to play:</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
-                    {gameCharacters.map(gc => (
-                      <button key={gc.id} onClick={() => claimGameCharacter(gc.id)} className="border border-tavern-border rounded p-2 text-left hover:border-tavern-gold transition-colors flex items-start gap-2">
-                        {gc.avatar_url && <img src={gc.avatar_url} className="w-8 h-8 rounded-full object-cover flex-shrink-0" alt="" />}
-                        <div>
-                          <div className="text-sm font-serif text-tavern-text">{gc.name}</div>
-                          <div className="text-xs text-tavern-muted">{gc.sheet_data?.race} {gc.sheet_data?.class}</div>
-                          <div className="text-xs text-tavern-muted">HP {gc.sheet_data?.combat?.max_hp} · AC {gc.sheet_data?.combat?.ac}</div>
-                        </div>
-                      </button>
-                    ))}
+                    {gameCharacters.map(gc => {
+                      const claimedByMe = gc.claimed_by === user?.id;
+                      const claimedByOther = gc.claimed_by && !claimedByMe;
+                      return (
+                        <button key={gc.id}
+                          onClick={() => !claimedByOther ? claimGameCharacter(gc.id) : undefined}
+                          disabled={!!claimedByOther}
+                          className={clsx('border rounded p-2 text-left flex items-start gap-2 transition-colors',
+                            claimedByMe ? 'border-tavern-gold/60 bg-tavern-gold/5 hover:border-tavern-gold' :
+                            claimedByOther ? 'border-tavern-border/30 opacity-50 cursor-not-allowed' :
+                            'border-tavern-border hover:border-tavern-gold'
+                          )}
+                        >
+                          {gc.avatar_url && <img src={gc.avatar_url} className="w-8 h-8 rounded-full object-cover flex-shrink-0" alt="" />}
+                          <div>
+                            <div className="text-sm font-serif text-tavern-text">{gc.name}</div>
+                            <div className="text-xs text-tavern-muted">{gc.sheet_data?.race} {gc.sheet_data?.class}</div>
+                            <div className="text-xs text-tavern-muted">HP {gc.sheet_data?.combat?.max_hp} · AC {gc.sheet_data?.combat?.ac}</div>
+                            {claimedByMe && <div className="text-xs text-tavern-gold mt-0.5">✓ Your character</div>}
+                            {claimedByOther && <div className="text-xs text-tavern-muted mt-0.5">Claimed by {gc.claimed_by_username}</div>}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="border-t border-tavern-border mb-3" />
                 </div>
@@ -410,8 +455,36 @@ export default function GameLobbyPage() {
             <Section title="Pre-built Characters" icon={<BookOpen size={15} />} defaultOpen={true}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-tavern-muted">Players claim these when joining.</p>
-                <button onClick={() => { setEditingGC(null); setShowGCModal(true); }} className="text-tavern-gold hover:text-tavern-gold-light"><Plus size={15} /></button>
+                <div className="flex gap-1.5">
+                  <button onClick={() => setShowLibraryChars(v => !v)} title="Import from SRD Library"
+                    className={clsx('flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors',
+                      showLibraryChars ? 'border-tavern-gold text-tavern-gold' : 'border-tavern-border text-tavern-muted hover:text-tavern-gold')}>
+                    <Library size={11} /> Library
+                  </button>
+                  <button onClick={() => { setEditingGC(null); setShowGCModal(true); }} className="text-tavern-gold hover:text-tavern-gold-light"><Plus size={15} /></button>
+                </div>
               </div>
+
+              {/* Library picker */}
+              {showLibraryChars && (
+                <div className="mb-3 p-2 bg-tavern-bg rounded border border-tavern-border">
+                  <p className="label text-xs mb-2">SRD Pre-built Characters — click to add to game:</p>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {libraryChars.map(lc => (
+                      <button key={lc.id} onClick={() => importLibraryChar(lc.id)}
+                        disabled={importingId === lc.id}
+                        className="w-full flex items-center justify-between text-left px-2 py-1.5 rounded hover:bg-tavern-card border border-transparent hover:border-tavern-border transition-colors">
+                        <div>
+                          <span className="text-sm text-tavern-text">{lc.name}</span>
+                          <span className="text-xs text-tavern-muted ml-2">{lc.sheet_data?.race} {lc.sheet_data?.class} · HP {lc.sheet_data?.combat?.max_hp}</span>
+                        </div>
+                        <Download size={12} className="text-tavern-muted flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {gameCharacters.length === 0 ? <p className="text-tavern-muted text-sm">None yet.</p> : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {gameCharacters.map(gc => (
@@ -423,10 +496,11 @@ export default function GameLobbyPage() {
                             : <div className="w-8 h-8 rounded-full bg-tavern-bg border border-tavern-border flex items-center justify-center text-sm">🧙</div>}
                           <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"><Camera size={10} className="text-white" /></div>
                         </div>
-                        <div>
-                          <div className="text-sm font-serif text-tavern-text">{gc.name}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-serif text-tavern-text truncate">{gc.name}</div>
                           <div className="text-xs text-tavern-muted">{gc.sheet_data?.race} {gc.sheet_data?.class}</div>
                           <div className="text-xs text-tavern-muted">HP {gc.sheet_data?.combat?.max_hp} · AC {gc.sheet_data?.combat?.ac}</div>
+                          {gc.claimed_by && <div className="text-xs text-tavern-gold/70 mt-0.5">Claimed: {gc.claimed_by_username}</div>}
                         </div>
                       </div>
                       <input type="file" accept="image/*" className="hidden"
@@ -448,8 +522,35 @@ export default function GameLobbyPage() {
             <Section title="Monsters" icon={<Skull size={15} />} defaultOpen={false}>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-tavern-muted">Monsters usable in encounters & as tokens.</p>
-                <button onClick={() => { setEditingMonster(null); setShowMonsterModal(true); }} className="text-tavern-gold hover:text-tavern-gold-light"><Plus size={15} /></button>
+                <div className="flex gap-1.5">
+                  <button onClick={() => setShowLibraryMonsters(v => !v)} title="Import from SRD Library"
+                    className={clsx('flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors',
+                      showLibraryMonsters ? 'border-tavern-gold text-tavern-gold' : 'border-tavern-border text-tavern-muted hover:text-tavern-gold')}>
+                    <Library size={11} /> Library
+                  </button>
+                  <button onClick={() => { setEditingMonster(null); setShowMonsterModal(true); }} className="text-tavern-gold hover:text-tavern-gold-light"><Plus size={15} /></button>
+                </div>
               </div>
+
+              {/* SRD Monster library picker */}
+              {showLibraryMonsters && (
+                <div className="mb-3 p-2 bg-tavern-bg rounded border border-tavern-border">
+                  <p className="label text-xs mb-2">SRD Monsters — click to add to game:</p>
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    {libraryMonsters.map(lm => (
+                      <button key={lm.id} onClick={() => importLibraryMonster(lm.id)}
+                        disabled={importingId === lm.id}
+                        className="w-full flex items-center justify-between text-left px-2 py-1.5 rounded hover:bg-tavern-card border border-transparent hover:border-tavern-border transition-colors">
+                        <div>
+                          <span className="text-sm text-tavern-text">{lm.name}</span>
+                          <span className="text-xs text-tavern-muted ml-2">CR {lm.cr} · {lm.size} {lm.type} · HP {lm.max_hp} AC {lm.ac}</span>
+                        </div>
+                        <Download size={12} className="text-tavern-muted flex-shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {monsters.length === 0 ? <p className="text-tavern-muted text-sm">No monsters yet.</p> : (
                 <div className="space-y-1">
                   {monsters.map(m => (

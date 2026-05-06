@@ -26,7 +26,8 @@ function emptySheet() {
     stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
     combat: { ac: 10, initiative: 0, speed: 30, max_hp: 10, current_hp: 10, temp_hp: 0, hit_dice: '1d8', death_saves: { successes: 0, failures: 0 } },
     saving_throws: {}, skills: {},
-    features: [] as string[], equipment: [] as string[],
+    attacks: [] as { name: string; bonus: string; damage: string }[],
+    features: '', equipment: '',
     spellcasting: {
       ability: '',
       slots: {
@@ -274,23 +275,51 @@ export default function GameCharacterModal({ gameId, character, onClose, onSaved
               </div>
             </Section>
 
+            <Section title="Attacks">
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-3 gap-1 mb-1">
+                  <span className="label text-[9px] text-center">Name</span>
+                  <span className="label text-[9px] text-center">To Hit</span>
+                  <span className="label text-[9px] text-center">Damage</span>
+                </div>
+                {(sheet.attacks || []).map((atk: any, i: number) => (
+                  <div key={i} className="grid grid-cols-3 gap-1">
+                    <input className="tavern-input text-xs py-1 px-2" value={atk.name || ''} placeholder="Longsword"
+                      onChange={(e) => { const a = [...(sheet.attacks||[])]; a[i] = { ...a[i], name: e.target.value }; set('attacks', a); }} />
+                    <input className="tavern-input text-xs py-1 px-2" value={atk.bonus || ''} placeholder="+5"
+                      onChange={(e) => { const a = [...(sheet.attacks||[])]; a[i] = { ...a[i], bonus: e.target.value }; set('attacks', a); }} />
+                    <div className="flex gap-0.5">
+                      <input className="tavern-input text-xs py-1 px-2 flex-1 min-w-0" value={atk.damage || ''} placeholder="1d8+3"
+                        onChange={(e) => { const a = [...(sheet.attacks||[])]; a[i] = { ...a[i], damage: e.target.value }; set('attacks', a); }} />
+                      <button onClick={() => { const a = (sheet.attacks||[]).filter((_:any,j:number) => j !== i); set('attacks', a); }}
+                        className="text-tavern-muted hover:text-red-400 px-1 flex-shrink-0 text-xs">✕</button>
+                    </div>
+                  </div>
+                ))}
+                <button className="btn-secondary w-full text-xs py-1 mt-1"
+                  onClick={() => set('attacks', [...(sheet.attacks || []), { name: '', bonus: '', damage: '' }])}>
+                  + Add Attack
+                </button>
+              </div>
+            </Section>
+
             <Section title="Features & Traits">
               <textarea
-                className="tavern-input text-sm resize-none"
+                className="tavern-input text-sm resize-y"
                 rows={4}
-                placeholder="One per line..."
-                value={(sheet.features || []).join('\n')}
-                onChange={(e) => set('features', e.target.value.split('\n').filter(Boolean))}
+                placeholder="Class features, racial traits..."
+                value={typeof sheet.features === 'string' ? sheet.features : (sheet.features || []).join('\n')}
+                onChange={(e) => set('features', e.target.value)}
               />
             </Section>
 
             <Section title="Equipment">
               <textarea
-                className="tavern-input text-sm resize-none"
+                className="tavern-input text-sm resize-y"
                 rows={4}
-                placeholder="One per line..."
-                value={(sheet.equipment || []).join('\n')}
-                onChange={(e) => set('equipment', e.target.value.split('\n').filter(Boolean))}
+                placeholder="List your items..."
+                value={typeof sheet.equipment === 'string' ? sheet.equipment : (sheet.equipment || []).join('\n')}
+                onChange={(e) => set('equipment', e.target.value)}
               />
             </Section>
 
@@ -343,14 +372,16 @@ export default function GameCharacterModal({ gameId, character, onClose, onSaved
                   );
                 })}
               </div>
+              <p className="text-[10px] text-tavern-muted mb-2">One spell per line in each box</p>
               {(['cantrips', 'level1', 'level2', 'level3', 'level4', 'level5', 'level6', 'level7', 'level8', 'level9'] as const).map((lvl) => (
                 <div key={lvl} className="mb-2">
-                  <label className="label block mb-1 capitalize">{lvl === 'cantrips' ? 'Cantrips' : `Level ${lvl.slice(5)} Spells`}</label>
-                  <input
-                    className="tavern-input text-xs py-1"
-                    placeholder="Comma separated..."
-                    value={(sheet.spells?.[lvl] || []).join(', ')}
-                    onChange={(e) => set(`spells.${lvl}`, e.target.value.split(',').map((s: string) => s.trim()).filter(Boolean))}
+                  <label className="label block mb-1">{lvl === 'cantrips' ? 'Cantrips' : `Level ${lvl.slice(5)} Spells`}</label>
+                  <textarea
+                    className="tavern-input text-xs py-1 resize-none"
+                    rows={2}
+                    placeholder="One per line..."
+                    value={(sheet.spells?.[lvl] || []).join('\n')}
+                    onChange={(e) => set(`spells.${lvl}`, e.target.value.split('\n').map((s: string) => s.trimStart()).filter(Boolean))}
                   />
                 </div>
               ))}

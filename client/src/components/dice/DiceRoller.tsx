@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { useGameStore } from '../../store/game';
 import clsx from 'clsx';
@@ -26,29 +27,30 @@ function parseNotation(notation: string) {
   return { dice, modifier: modMatch ? parseInt(modMatch[1]) : 0 };
 }
 
-// ─── Geometry (module-level cache — disposable geometries) ─────────────────
+// ─── Geometry cache ───────────────────────────────────────────────────────────
 const geoCache: Partial<Record<DieType, THREE.BufferGeometry>> = {};
+const edgeCache: Partial<Record<DieType, THREE.EdgesGeometry>> = {};
 
 function buildD10(): THREE.BufferGeometry {
   const n = 5;
   const verts: number[] = [];
   const idx: number[] = [];
-  verts.push(0, 1.1, 0);                                                  // 0: top apex
-  for (let i = 0; i < n; i++) {                                            // 1–5: upper ring
+  verts.push(0, 1.1, 0);
+  for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2 + Math.PI / n;
     verts.push(0.9 * Math.cos(a), 0.1, 0.9 * Math.sin(a));
   }
-  for (let i = 0; i < n; i++) {                                            // 6–10: lower ring
+  for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
     verts.push(0.9 * Math.cos(a), -0.1, 0.9 * Math.sin(a));
   }
-  verts.push(0, -1.1, 0);                                                  // 11: bottom apex
-  for (let i = 0; i < n; i++) idx.push(0, 1 + i, 1 + (i + 1) % n);      // top fan
-  for (let i = 0; i < n; i++) {                                            // kite band
+  verts.push(0, -1.1, 0);
+  for (let i = 0; i < n; i++) idx.push(0, 1 + i, 1 + (i + 1) % n);
+  for (let i = 0; i < n; i++) {
     const a = 1 + i, b = 1 + (i + 1) % n, c = 6 + i, d = 6 + (i + 1) % n;
     idx.push(a, b, c); idx.push(b, d, c);
   }
-  for (let i = 0; i < n; i++) idx.push(11, 6 + (i + 1) % n, 6 + i);     // bottom fan
+  for (let i = 0; i < n; i++) idx.push(11, 6 + (i + 1) % n, 6 + i);
   const geo = new THREE.BufferGeometry();
   geo.setIndex(idx);
   geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
@@ -59,35 +61,45 @@ function buildD10(): THREE.BufferGeometry {
 function getGeo(die: DieType): THREE.BufferGeometry {
   if (!geoCache[die]) {
     switch (die) {
-      case 'd4':   geoCache.d4   = new THREE.TetrahedronGeometry(1.05);   break;
-      case 'd6':   geoCache.d6   = new THREE.BoxGeometry(1.3, 1.3, 1.3);  break;
-      case 'd8':   geoCache.d8   = new THREE.OctahedronGeometry(1.1);      break;
-      case 'd10':  geoCache.d10  = buildD10();                             break;
-      case 'd12':  geoCache.d12  = new THREE.DodecahedronGeometry(1.0);    break;
-      case 'd20':  geoCache.d20  = new THREE.IcosahedronGeometry(1.1);     break;
-      case 'd100': geoCache.d100 = buildD10();                             break;
+      case 'd4':   geoCache.d4   = new THREE.TetrahedronGeometry(1.05); break;
+      case 'd6':   geoCache.d6   = new THREE.BoxGeometry(1.3, 1.3, 1.3); break;
+      case 'd8':   geoCache.d8   = new THREE.OctahedronGeometry(1.1);   break;
+      case 'd10':  geoCache.d10  = buildD10();                           break;
+      case 'd12':  geoCache.d12  = new THREE.DodecahedronGeometry(1.0); break;
+      case 'd20':  geoCache.d20  = new THREE.IcosahedronGeometry(1.1);  break;
+      case 'd100': geoCache.d100 = buildD10();                           break;
     }
   }
   return geoCache[die]!;
 }
 
-// ─── Die mesh (inside Canvas) ──────────────────────────────────────────────
+function getEdges(die: DieType): THREE.EdgesGeometry {
+  if (!edgeCache[die]) {
+    edgeCache[die] = new THREE.EdgesGeometry(getGeo(die));
+  }
+  return edgeCache[die]!;
+}
+
+// ─── Colours by result ────────────────────────────────────────────────────────
 type PhaseState = 'idle' | 'tumbling' | 'landing';
 
-function DiceMesh({ die, phase, position, isMax, isMin }: {
-  die: DieType;
-  phase: PhaseState;
-  position: [number, number, number];
-  isMax?: boolean;
-  isMin?: boolean;
+function dieColors(isMax: boolean, isMin: boolean) {
+  if (isMax) return { face: '#c27c0e', emissive: '#7c4f00', specular: '#ffe066', edge: '#ffd700', label: '#ffd700', labelBg: 'rgba(50,30,0,0.92)', labelBorder: '#c27c0e' };
+  if (isMin) return { face: '#cc2222', emissive: '#7f0000', specular: '#ff9999', edge: '#ff4444', label: '#ff9999', labelBg: 'rgba(50,0,0,0.92)',  labelBorder: '#cc2222' };
+  return       { face: '#1a6fd4', emissive: '#0d2e6e', specular: '#90cdf4', edge: '#60a5fa', label: '#e0f2fe', labelBg: 'rgba(0,10,40,0.92)',   labelBorder: '#3b82f6' };
+}
+
+// ─── Inner rotating group (mesh + edge lines) ─────────────────────────────────
+function SpinningDie({ die, phase, isMax, isMin }: {
+  die: DieType; phase: PhaseState; isMax: boolean; isMin: boolean;
 }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
+  const groupRef = useRef<THREE.Group>(null!);
   const vel = useRef({ x: 0, y: 0, z: 0 });
 
   useEffect(() => {
     if (phase === 'tumbling') {
       vel.current = {
-        x: (Math.random() > 0.5 ? 1 : -1) * (10 + Math.random() * 8),
+        x: (Math.random() > 0.5 ? 1 : -1) * (10 + Math.random() * 9),
         y: (Math.random() > 0.5 ? 1 : -1) * (14 + Math.random() * 10),
         z: (Math.random() > 0.5 ? 1 : -1) * (6  + Math.random() * 6),
       };
@@ -95,33 +107,91 @@ function DiceMesh({ die, phase, position, isMax, isMin }: {
   }, [phase]);
 
   useFrame((_, dt) => {
-    if (!meshRef.current) return;
+    if (!groupRef.current) return;
     if (phase === 'tumbling') {
-      meshRef.current.rotation.x += vel.current.x * dt;
-      meshRef.current.rotation.y += vel.current.y * dt;
-      meshRef.current.rotation.z += vel.current.z * dt;
+      groupRef.current.rotation.x += vel.current.x * dt;
+      groupRef.current.rotation.y += vel.current.y * dt;
+      groupRef.current.rotation.z += vel.current.z * dt;
     } else if (phase === 'landing') {
       vel.current.x *= 0.87;
       vel.current.y *= 0.87;
       vel.current.z *= 0.87;
-      meshRef.current.rotation.x += vel.current.x * dt;
-      meshRef.current.rotation.y += vel.current.y * dt;
-      meshRef.current.rotation.z += vel.current.z * dt;
+      groupRef.current.rotation.x += vel.current.x * dt;
+      groupRef.current.rotation.y += vel.current.y * dt;
+      groupRef.current.rotation.z += vel.current.z * dt;
     }
   });
 
-  const color   = isMax ? '#c8930a' : isMin ? '#7f1010' : '#5a3510';
-  const emissive= isMax ? '#441e00' : isMin ? '#2a0505' : '#1c0900';
-  const specular = isMax ? '#ffcc44' : isMin ? '#aa2222' : '#996622';
+  const c = dieColors(isMax, isMin);
+  const edges = useMemo(() => getEdges(die), [die]);
 
   return (
-    <mesh ref={meshRef} position={position} geometry={getGeo(die)}>
-      <meshPhongMaterial color={color} emissive={emissive} shininess={110} specular={specular} />
-    </mesh>
+    <group ref={groupRef}>
+      <mesh geometry={getGeo(die)}>
+        <meshPhongMaterial color={c.face} emissive={c.emissive} shininess={130} specular={c.specular} />
+      </mesh>
+      <lineSegments geometry={edges}>
+        <lineBasicMaterial color={c.edge} transparent opacity={0.55} />
+      </lineSegments>
+    </group>
   );
 }
 
-// ─── Multi-die canvas ──────────────────────────────────────────────────────
+// ─── Die group — outer (no rotation) + label ────────────────────────────────
+function DieGroup({ die, phase, position, isMax, isMin, result }: {
+  die: DieType;
+  phase: PhaseState;
+  position: [number, number, number];
+  isMax: boolean;
+  isMin: boolean;
+  result?: number;
+}) {
+  const c = dieColors(isMax, isMin);
+
+  return (
+    <group position={position}>
+      <SpinningDie die={die} phase={phase} isMax={isMax} isMin={isMin} />
+
+      {phase === 'idle' && result !== undefined && (
+        <Html center zIndexRange={[200, 0]}>
+          <div style={{
+            background: c.labelBg,
+            color: c.label,
+            border: `1.5px solid ${c.labelBorder}`,
+            borderRadius: '5px',
+            padding: '1px 9px',
+            fontFamily: 'Georgia, "Times New Roman", serif',
+            fontWeight: 'bold',
+            fontSize: '22px',
+            lineHeight: '1.35',
+            whiteSpace: 'nowrap',
+            boxShadow: `0 0 10px ${c.labelBorder}99`,
+            userSelect: 'none',
+            pointerEvents: 'none',
+          }}>
+            {result}
+          </div>
+        </Html>
+      )}
+
+      {/* Spinning "?" while rolling */}
+      {phase !== 'idle' && (
+        <Html center zIndexRange={[200, 0]}>
+          <div style={{
+            color: 'rgba(255,255,255,0.25)',
+            fontFamily: 'Georgia, serif',
+            fontWeight: 'bold',
+            fontSize: '18px',
+            userSelect: 'none',
+            pointerEvents: 'none',
+          }}>?</div>
+        </Html>
+      )}
+    </group>
+  );
+}
+
+// ─── Multi-die canvas ─────────────────────────────────────────────────────────
 interface RollEntry { value: number; sides: number }
 
 function DiceCanvas({ rolls, phase }: { rolls: RollEntry[]; phase: PhaseState }) {
@@ -133,23 +203,25 @@ function DiceCanvas({ rolls, phase }: { rolls: RollEntry[]; phase: PhaseState })
     <Canvas
       key={rolls.length}
       camera={{ position: [0, 0, camZ], fov: 50 }}
-      style={{ width: '100%', height: 120 }}
+      style={{ width: '100%', height: 130 }}
       gl={{ antialias: true }}
     >
-      <color attach="background" args={['#0d0805']} />
-      <ambientLight intensity={0.5} />
-      <directionalLight position={[4, 5, 5]} intensity={1.3} castShadow />
-      <pointLight position={[-4, -3, 3]} intensity={0.4} color="#cc8844" />
+      <color attach="background" args={['#070c1a']} />
+      <ambientLight intensity={0.4} />
+      <directionalLight position={[3, 5, 5]}  intensity={1.4} />
+      <directionalLight position={[-3, -2, 3]} intensity={0.4} color="#6699ff" />
+      <pointLight       position={[0, 4, 2]}   intensity={0.6} color="#ffffff" />
       {rolls.map((r, i) => {
         const die = sidesToDie(r.sides);
         return (
-          <DiceMesh
+          <DieGroup
             key={i}
             die={die}
             phase={phase}
             position={[i * spacing - totalSpan / 2, 0, 0]}
             isMax={r.value === r.sides}
             isMin={r.value === 1 && r.sides > 1}
+            result={r.value}
           />
         );
       })}
@@ -157,11 +229,11 @@ function DiceCanvas({ rolls, phase }: { rolls: RollEntry[]; phase: PhaseState })
   );
 }
 
-// ─── SVG silhouettes for selector buttons ─────────────────────────────────
+// ─── SVG silhouettes for selector buttons ─────────────────────────────────────
 function DieSVG({ die, active }: { die: DieType; active: boolean }) {
-  const stroke = active ? '#c8930a' : '#7a5010';
-  const fill   = active ? '#5a3200' : '#2e1b0a';
-  const inner  = active ? '#c8930a' : '#7a5010';
+  const stroke = active ? '#60a5fa' : '#4b5563';
+  const fill   = active ? '#1e3a8a' : '#111827';
+  const inner  = active ? '#93c5fd' : '#374151';
   const s = 34;
   switch (die) {
     case 'd4':
@@ -169,10 +241,8 @@ function DieSVG({ die, active }: { die: DieType; active: boolean }) {
     case 'd6':
       return <svg width={s} height={s} viewBox="0 0 36 36">
         <rect x="3" y="3" width="30" height="30" rx="3" fill={fill} stroke={stroke} strokeWidth="1.5" />
-        <circle cx="11" cy="11" r="2.5" fill={inner} opacity="0.7" />
-        <circle cx="25" cy="25" r="2.5" fill={inner} opacity="0.7" />
-        <circle cx="11" cy="25" r="2.5" fill={inner} opacity="0.5" />
-        <circle cx="25" cy="11" r="2.5" fill={inner} opacity="0.5" />
+        <circle cx="11" cy="11" r="2.5" fill={inner} opacity="0.8" />
+        <circle cx="25" cy="25" r="2.5" fill={inner} opacity="0.8" />
       </svg>;
     case 'd8':
       return <svg width={s} height={s} viewBox="0 0 40 44">
@@ -196,12 +266,10 @@ function DieSVG({ die, active }: { die: DieType; active: boolean }) {
         <polygon points="20,2 38,18 32,40 8,40 2,18" fill={fill} stroke={stroke} strokeWidth="1.5" />
         <text x="20" y="27" textAnchor="middle" fontSize="9" fill={inner} fontFamily="serif" opacity="0.9">%</text>
       </svg>;
-    default:
-      return <svg width={s} height={s} viewBox="0 0 36 36"><rect x="3" y="3" width="30" height="30" rx="3" fill={fill} stroke={stroke} strokeWidth="1.5" /></svg>;
   }
 }
 
-// ─── Die selector button ──────────────────────────────────────────────────
+// ─── Die selector button ───────────────────────────────────────────────────────
 function DieButton({ die, count, onClick }: { die: DieType; count: number; onClick: () => void }) {
   return (
     <button
@@ -210,14 +278,14 @@ function DieButton({ die, count, onClick }: { die: DieType; count: number; onCli
       className={clsx(
         'relative flex flex-col items-center justify-center py-2 rounded border transition-all select-none hover:-translate-y-0.5 active:translate-y-0',
         count > 0
-          ? 'border-tavern-gold bg-tavern-gold/10'
-          : 'border-tavern-border hover:border-tavern-gold/50 bg-tavern-bg/40'
+          ? 'border-blue-500/60 bg-blue-900/20'
+          : 'border-tavern-border hover:border-blue-500/40 bg-tavern-bg/40'
       )}
     >
       <DieSVG die={die} active={count > 0} />
       <span className="text-[10px] font-serif mt-0.5 text-tavern-muted leading-none">{die}</span>
       {count > 0 && (
-        <span className="absolute -top-1.5 -right-1.5 bg-tavern-gold text-tavern-bg text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none z-10">
+        <span className="absolute -top-1.5 -right-1.5 bg-blue-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none z-10">
           {count}
         </span>
       )}
@@ -225,21 +293,21 @@ function DieButton({ die, count, onClick }: { die: DieType; count: number; onCli
   );
 }
 
-// ─── Roll result display ──────────────────────────────────────────────────
+// ─── Roll result display ───────────────────────────────────────────────────────
 interface RollResult { notation: string; rolls: RollEntry[]; modifier: number; total: number }
 
 function RollResultDisplay({ result, phase }: { result: RollResult; phase: PhaseState }) {
   return (
     <div className={clsx(
       'rounded-lg border overflow-hidden',
-      phase !== 'idle' ? 'border-tavern-gold/60' : 'border-tavern-border',
+      phase !== 'idle' ? 'border-blue-500/60' : 'border-tavern-border',
     )}>
-      <div className="bg-tavern-bg/80 text-[11px] text-tavern-muted text-center pt-2 pb-1 font-serif tracking-wider">
+      <div className="bg-[#070c1a] text-[11px] text-tavern-muted text-center pt-2 pb-1 font-serif tracking-wider">
         {result.notation}
       </div>
 
       <Suspense fallback={
-        <div className="h-[120px] bg-[#0d0805] flex items-center justify-center text-tavern-muted text-xs">
+        <div className="h-[130px] bg-[#070c1a] flex items-center justify-center text-tavern-muted text-xs">
           Loading 3D dice...
         </div>
       }>
@@ -247,41 +315,46 @@ function RollResultDisplay({ result, phase }: { result: RollResult; phase: Phase
       </Suspense>
 
       <div className="bg-tavern-bg/80 px-3 pt-2 pb-3">
-        <div className="flex flex-wrap gap-1.5 justify-center mb-2">
-          {result.rolls.map((r, i) => {
-            const isMax = r.value === r.sides;
-            const isMin = r.value === 1 && r.sides > 1;
-            return (
-              <span key={i} className={clsx(
-                'text-xs font-serif font-bold rounded px-1.5 py-0.5 border',
-                isMax ? 'text-yellow-300 border-yellow-600/50 bg-yellow-900/20' :
-                isMin ? 'text-red-400   border-red-600/40   bg-red-900/20'    :
-                        'text-tavern-text border-tavern-border/60 bg-tavern-bg',
-              )}>
-                {sidesToDie(r.sides)}: {r.value}
-              </span>
-            );
-          })}
-        </div>
-
-        {result.modifier !== 0 && (
-          <div className="text-center text-xs text-tavern-muted font-serif mb-1">
-            {result.modifier > 0 ? `+${result.modifier}` : result.modifier} modifier
+        {phase !== 'idle' ? (
+          <div className="h-14 flex items-center justify-center">
+            <span className="text-blue-400/60 text-sm font-serif animate-pulse tracking-widest">Rolling…</span>
           </div>
-        )}
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-1.5 justify-center mb-2">
+              {result.rolls.map((r, i) => {
+                const isMax = r.value === r.sides;
+                const isMin = r.value === 1 && r.sides > 1;
+                return (
+                  <span key={i} className={clsx(
+                    'text-xs font-serif font-bold rounded px-1.5 py-0.5 border',
+                    isMax ? 'text-yellow-300 border-yellow-500/50 bg-yellow-900/20' :
+                    isMin ? 'text-red-400   border-red-500/40   bg-red-900/20'    :
+                            'text-blue-200  border-blue-600/40  bg-blue-900/20',
+                  )}>
+                    {sidesToDie(r.sides)}: {r.value}
+                  </span>
+                );
+              })}
+            </div>
 
-        <div className={clsx(
-          'text-center font-serif text-3xl font-bold',
-          phase !== 'idle' ? 'text-tavern-gold animate-pulse' : 'text-tavern-gold',
-        )}>
-          {result.total}
-        </div>
+            {result.modifier !== 0 && (
+              <div className="text-center text-xs text-tavern-muted font-serif mb-1">
+                {result.modifier > 0 ? `+${result.modifier}` : result.modifier} modifier
+              </div>
+            )}
+
+            <div className="text-center font-serif text-3xl font-bold text-blue-300">
+              {result.total}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-// ─── Main DiceRoller ──────────────────────────────────────────────────────
+// ─── Main DiceRoller ───────────────────────────────────────────────────────────
 export default function DiceRoller() {
   const { socket } = useGameStore();
   const [counts,     setCounts]     = useState<Record<string, number>>({});
@@ -315,8 +388,8 @@ export default function DiceRoller() {
     setPhase('tumbling');
     phaseTimer.current = setTimeout(() => {
       setPhase('landing');
-      phaseTimer.current = setTimeout(() => setPhase('idle'), 600);
-    }, 900);
+      phaseTimer.current = setTimeout(() => setPhase('idle'), 700);
+    }, 950);
 
     socket?.emit('dice_roll', { notation, results: rolls.map(r => r.value), total });
   }
@@ -368,7 +441,7 @@ export default function DiceRoller() {
         {phase !== 'idle' ? 'Rolling...' : `Roll ${buildNotation() || '—'}`}
       </button>
 
-      {/* Custom notation input */}
+      {/* Custom notation */}
       <div className="flex gap-2">
         <input
           className="tavern-input text-sm py-1.5 flex-1"

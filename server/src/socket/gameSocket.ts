@@ -186,9 +186,18 @@ export function setupGameSocket(io: Server) {
       io.to(`game:${socket.gameId}`).emit('token_moved', { mapId, tokenId, x, y, movedBy: socket.user!.id });
     });
 
-    // Token add/remove (DM only)
+    // Token add: DM can add any token; players can only add their own
     socket.on('token_add', ({ mapId, token }: any) => {
-      if (!socket.gameId || !socket.isDM) return;
+      if (!socket.gameId) return;
+      // Players may only place a token that belongs to themselves
+      if (!socket.isDM && token.userId !== socket.user!.id) return;
+      // Players may only place one token (their own) per map
+      if (!socket.isDM) {
+        const map = db.prepare('SELECT * FROM maps WHERE id = ? AND game_id = ?').get(mapId, socket.gameId) as any;
+        if (!map) return;
+        const existing = JSON.parse(map.tokens || '[]');
+        if (existing.some((t: any) => t.userId === socket.user!.id)) return;
+      }
 
       const map = db.prepare('SELECT * FROM maps WHERE id = ? AND game_id = ?').get(mapId, socket.gameId) as any;
       if (!map) return;
