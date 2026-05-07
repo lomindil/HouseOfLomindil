@@ -15,6 +15,8 @@ import uploadRouter from './routes/upload';
 import monstersRouter from './routes/monsters';
 import encountersRouter from './routes/encounters';
 import libraryRouter from './routes/library';
+import campaignsRouter from './routes/campaigns';
+import adminRouter from './routes/admin';
 import { setupGameSocket } from './socket/gameSocket';
 
 // Ensure upload directories exist
@@ -50,6 +52,8 @@ app.use('/api/games/:gameId/maps', mapsRouter);
 app.use('/api/games/:gameId/monsters', monstersRouter);
 app.use('/api/games/:gameId/encounters', encountersRouter);
 app.use('/api/library', libraryRouter);
+app.use('/api/campaigns', campaignsRouter);
+app.use('/api/admin', adminRouter);
 app.use('/api/games/:gameId', chatRouter);
 app.use('/api/upload', uploadRouter);
 
@@ -66,6 +70,6 @@ if (process.env.NODE_ENV === 'production') {
 
 const PORT = parseInt(process.env.PORT || '3001');
 httpServer.listen(PORT, () => {
-  console.log(`Tavern VTT server running on http://localhost:${PORT}`);
+  console.log(`House of Lomindil server running on http://localhost:${PORT}`);
   console.log(`Mode: ${process.env.NODE_ENV || 'development'}`);
 });

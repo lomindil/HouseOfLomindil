@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="45%" r="55%">
+      <stop offset="0%"   stop-color="#3d2200" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#0d0604" stop-opacity="1"/>
+    </radialGradient>
+    <filter id="blur"><feGaussianBlur stdDeviation="60"/></filter>
+    <filter id="textglow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- Ambient glow blobs -->
+  <ellipse cx="600" cy="280" rx="480" ry="200" fill="#b8860b" opacity="0.07" filter="url(#blur)"/>
+  <ellipse cx="600" cy="200" rx="200" ry="100" fill="#c9a227" opacity="0.05" filter="url(#blur)"/>
+
+  <!-- Gold border frame -->
+  <rect x="24" y="24" width="1152" height="582" rx="8" fill="none" stroke="#c9a227" stroke-width="1" stroke-opacity="0.3"/>
+  <rect x="32" y="32" width="1136" height="566" rx="6" fill="none" stroke="#c9a227" stroke-width="0.5" stroke-opacity="0.15"/>
+
+  <!-- Corner ticks -->
+  <line x1="24"  y1="50"  x2="24"  y2="24"  stroke="#c9a227" stroke-width="1.5" stroke-opacity="0.5"/>
+  <line x1="24"  y1="24"  x2="50"  y2="24"  stroke="#c9a227" stroke-width="1.5" stroke-opacity="0.5"/>
+  <line x1="1176" y1="50"  x2="1176" y2="24"  stroke="#c9a227" stroke-width="1.5" stroke-opacity="0.5"/>
+  <line x1="1176" y1="24"  x2="1150" y2="24"  stroke="#c9a227" stroke-width="1.5" stroke-opacity="0.5"/>
+  <line x1="24"  y1="580" x2="24"  y2="606" stroke="#c9a227" stroke-width="1.5" stroke-opacity="0.5"/>
+  <line x1="24"  y1="606" x2="50"  y2="606" stroke="#c9a227" stroke-width="1.5" stroke-opacity="0.5"/>
+  <line x1="1176" y1="580" x2="1176" y2="606" stroke="#c9a227" stroke-width="1.5" stroke-opacity="0.5"/>
+  <line x1="1176" y1="606" x2="1150" y2="606" stroke="#c9a227" stroke-width="1.5" stroke-opacity="0.5"/>
+
+  <!-- Crossed swords icon -->
+  <g transform="translate(600,175) scale(2.4)" opacity="0.85">
+    <line x1="-16" y1="-16" x2="16"  y2="16"  stroke="#c9a227" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="16"  y1="-16" x2="-16" y2="16"  stroke="#c9a227" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="-10" y1="-8"  x2="-17" y2="-4"  stroke="#c9a227" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="-10" y1="-8"  x2="-6"  y2="-15" stroke="#c9a227" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="10"  y1="-8"  x2="17"  y2="-4"  stroke="#c9a227" stroke-width="1.8" stroke-linecap="round"/>
+    <line x1="10"  y1="-8"  x2="6"   y2="-15" stroke="#c9a227" stroke-width="1.8" stroke-linecap="round"/>
+    <circle cx="16"  cy="16"  r="2.5" fill="#c9a227"/>
+    <circle cx="-16" cy="16"  r="2.5" fill="#c9a227"/>
+    <circle cx="0"   cy="0"   r="3"   fill="#1a0f0a" stroke="#c9a227" stroke-width="1.2"/>
+  </g>
+
+  <!-- Divider line -->
+  <line x1="460" y1="228" x2="740" y2="228" stroke="#c9a227" stroke-width="0.6" stroke-opacity="0.4"/>
+
+  <!-- "HOUSE OF" -->
+  <text x="600" y="308" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="56" font-weight="700" letter-spacing="14" fill="#e8d5b7" opacity="0.7">HOUSE OF</text>
+
+  <!-- "LOMINDIL" -->
+  <text x="600" y="390" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif"
+        font-size="88" font-weight="900" letter-spacing="16" fill="#c9a227" filter="url(#textglow)">LOMINDIL</text>
+
+  <!-- Tagline -->
+  <text x="600" y="440" text-anchor="middle" font-family="Georgia, serif"
+        font-size="22" font-style="italic" fill="#a08060" letter-spacing="2">Where legends are forged and dice decide fate.</text>
+
+  <!-- Divider -->
+  <line x1="440" y1="468" x2="760" y2="468" stroke="#c9a227" stroke-width="0.5" stroke-opacity="0.3"/>
+
+  <!-- Sub-tags -->
+  <text x="600" y="500" text-anchor="middle" font-family="Georgia, serif"
+        font-size="16" fill="#6b5030" letter-spacing="6">D&amp;D 5e · VIRTUAL TABLETOP · PRIVATE CAMPAIGNS</text>
+</svg>

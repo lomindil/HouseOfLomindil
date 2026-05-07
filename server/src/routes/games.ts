@@ -39,8 +39,9 @@ router.post('/', (req: AuthRequest, res: Response) => {
   }
 
   const id = uuidv4();
-  db.prepare('INSERT INTO games (id, dm_id, name, description, join_code) VALUES (?, ?, ?, ?, ?)').run(
-    id, req.user!.id, name, description || '', joinCode
+  const autoApproved = req.user!.username === 'lomindil' ? 1 : 0;
+  db.prepare('INSERT INTO games (id, dm_id, name, description, join_code, approved) VALUES (?, ?, ?, ?, ?, ?)').run(
+    id, req.user!.id, name, description || '', joinCode, autoApproved
   );
 
   const game = db.prepare('SELECT * FROM games WHERE id = ?').get(id);

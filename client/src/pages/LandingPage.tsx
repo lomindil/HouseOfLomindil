@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/auth';
 import { Sword, Shield, Map, Dices, MessageSquare, ScrollText, Users } from 'lucide-react';
 
+
 const FEATURES = [
   { icon: <ScrollText size={22} />, label: 'D&D 5e Sheets', desc: 'Full character management with stats, spells & inventory' },
   { icon: <Map size={22} />, label: 'Battle Maps', desc: 'Import maps, place tokens, draw, and paint fog of war' },
@@ -76,6 +77,9 @@ export default function LandingPage() {
                 </Link>
               </>
             )}
+            <Link to="/campaigns" className="btn-secondary text-base py-3 px-8">
+              Browse Campaigns
+            </Link>
           </div>
         </div>
       </main>

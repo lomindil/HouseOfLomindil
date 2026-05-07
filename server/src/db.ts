@@ -206,6 +206,20 @@ db.exec(`
   );
 `);
 
+// Campaign army (interest/waitlist) table
+db.exec(`
+  CREATE TABLE IF NOT EXISTS campaign_army (
+    id TEXT PRIMARY KEY,
+    game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    display_name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT DEFAULT '',
+    message TEXT DEFAULT '',
+    created_at INTEGER DEFAULT (unixepoch())
+  );
+`);
+
 // Migrations
 try {
   db.exec(`ALTER TABLE characters ADD COLUMN game_id TEXT REFERENCES games(id) ON DELETE CASCADE`);
@@ -219,6 +233,17 @@ try {
 try {
   db.exec(`ALTER TABLE games ADD COLUMN current_session_id TEXT`);
 } catch { /* already exists */ }
+
+let _approvedColumnAdded = false;
+try {
+  db.exec(`ALTER TABLE games ADD COLUMN approved INTEGER DEFAULT 0`);
+  _approvedColumnAdded = true;
+} catch { /* already exists */ }
+
+// On first migration, auto-approve all existing games owned by lomindil
+if (_approvedColumnAdded) {
+  db.exec(`UPDATE games SET approved = 1 WHERE dm_id IN (SELECT id FROM users WHERE username = 'lomindil')`);
+}
 
 // ─── SRD Seed Data ────────────────────────────────────────────────────────────
 const monsterCount = (db.prepare('SELECT COUNT(*) as cnt FROM monster_templates').get() as any).cnt;

@@ -17,6 +17,7 @@ import clsx from 'clsx';
 interface Game {
   id: string; name: string; description: string; status: string;
   join_code: string; dm_id: string; dm_username: string; is_dm: boolean;
+  approved: number;
   players: any[]; maps: any[]; current_map_id?: string;
 }
 
@@ -325,6 +326,19 @@ export default function GameLobbyPage() {
     <div className="min-h-screen">
       <Navbar />
       <main className="max-w-5xl mx-auto px-4 py-8">
+
+        {/* Pending approval banner */}
+        {isDM && game.approved === 0 && (
+          <div className="mb-6 flex items-start gap-3 bg-amber-900/20 border border-amber-700/50 rounded-lg px-4 py-3 text-sm text-amber-300">
+            <span className="text-amber-400 mt-0.5">⏳</span>
+            <div>
+              <span className="font-serif font-semibold">Awaiting Hall Administrator Approval</span>
+              <p className="text-amber-300/70 text-xs mt-0.5">
+                This campaign is not yet visible in the public campaign listing. The Hall Administrator (lomindil) will review and approve it shortly.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div className="flex items-start justify-between mb-8 gap-4 flex-wrap">

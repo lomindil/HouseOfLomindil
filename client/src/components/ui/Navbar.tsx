@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import api from '../../lib/api';
 import toast from 'react-hot-toast';
-import { LogOut, User, Sword, Home, KeyRound, X } from 'lucide-react';
+import { LogOut, User, Sword, Home, KeyRound, X, Map, ShieldCheck } from 'lucide-react';
 import clsx from 'clsx';
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
@@ -102,6 +102,8 @@ export default function Navbar() {
             {navLink('/dashboard', <Home size={13} />, 'Hall')}
             {navLink('/characters', <User size={13} />, 'Characters')}
             {navLink('/games', <Sword size={13} />, 'Games')}
+            {navLink('/campaigns', <Map size={13} />, 'Campaigns')}
+            {user?.username === 'lomindil' && navLink('/admin', <ShieldCheck size={13} />, 'Admin')}
           </nav>
 
           <div className="flex items-center gap-3 shrink-0">

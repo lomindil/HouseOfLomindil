@@ -23,3 +23,20 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 export function signToken(payload: { id: string; email: string; username: string }): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
 }
+
+/** Like authenticate but doesn't reject — sets req.user if token present and valid */
+export function optionalAuth(req: AuthRequest, _res: Response, next: NextFunction) {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (token) {
+    try {
+      req.user = jwt.verify(token, JWT_SECRET) as { id: string; email: string; username: string };
+    } catch { /* ignore invalid token */ }
+  }
+  next();
+}
+
+export function adminOnly(req: AuthRequest, res: Response, next: NextFunction) {
+  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+  if (req.user.username !== 'lomindil') return res.status(403).json({ error: 'Admin only' });
+  next();
+}
