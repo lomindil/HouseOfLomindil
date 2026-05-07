@@ -174,6 +174,15 @@ export default function GameLobbyPage() {
     } catch { toast.error('Failed to save map'); }
   }
 
+  async function deleteMap(mapId: string, mapName: string) {
+    if (!confirm(`Delete map "${mapName}"? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/games/${id}/maps/${mapId}`);
+      toast.success(`Map "${mapName}" deleted`);
+      setGame(g => g ? { ...g, maps: g.maps.filter(m => m.id !== mapId) } : g);
+    } catch { toast.error('Failed to delete map'); }
+  }
+
   // ── Characters ───────────────────────────────────────────────────────────────
   async function selectCharacter(charId: string) {
     setSelectedChar(charId);
@@ -694,6 +703,8 @@ export default function GameLobbyPage() {
                       <span className="text-xs text-tavern-muted">Grid: {m.grid_size}px</span>
                       <button onClick={() => { setEditingMap({ id: m.id, name: m.name, imageUrl: m.image_url, gridSize: m.grid_size }); setShowMapBuilder(true); }}
                         className="opacity-0 group-hover:opacity-100 text-tavern-muted hover:text-tavern-gold" title="Edit"><Pencil size={12} /></button>
+                      <button onClick={() => deleteMap(m.id, m.name)}
+                        className="opacity-0 group-hover:opacity-100 text-tavern-muted hover:text-red-400" title="Delete map"><Trash2 size={12} /></button>
                     </div>
                   </div>
                 ))}
