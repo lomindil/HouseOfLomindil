@@ -72,7 +72,8 @@ router.get('/join/:code', (req: AuthRequest, res: Response) => {
 
   const dm = db.prepare('SELECT username FROM users WHERE id = ?').get(game.dm_id) as any;
   const players = db.prepare(`
-    SELECT u.id, u.username, gp.character_id, c.name as char_name, c.avatar_url
+    SELECT u.id, u.username, gp.character_id, c.name as char_name, c.avatar_url,
+           json_extract(c.sheet_data, '$.race') as char_race
     FROM game_players gp
     JOIN users u ON u.id = gp.user_id
     LEFT JOIN characters c ON c.id = gp.character_id
@@ -92,8 +93,13 @@ router.post('/join', (req: AuthRequest, res: Response) => {
   if (game.dm_id === req.user!.id) return res.status(400).json({ error: 'DM cannot join as a player' });
 
   if (character_id) {
-    const char = db.prepare('SELECT * FROM characters WHERE id = ? AND user_id = ?').get(character_id, req.user!.id);
-    if (!char) return res.status(400).json({ error: 'Character not found' });
+    const ownChar = db.prepare('SELECT id FROM characters WHERE id = ? AND user_id = ?').get(character_id, req.user!.id);
+    const gameChar = !ownChar && db.prepare('SELECT id FROM characters WHERE id = ? AND game_id = ?').get(character_id, game.id);
+    if (!ownChar && !gameChar) return res.status(400).json({ error: 'Character not found' });
+    if (gameChar) {
+      const inUse = db.prepare('SELECT 1 FROM game_players WHERE game_id = ? AND character_id = ? AND user_id != ?').get(game.id, character_id, req.user!.id);
+      if (inUse) return res.status(409).json({ error: 'Character already in use by another player' });
+    }
   }
 
   db.prepare(`
@@ -115,7 +121,8 @@ router.get('/:id', (req: AuthRequest, res: Response) => {
 
   const dm = db.prepare('SELECT id, username FROM users WHERE id = ?').get(game.dm_id) as any;
   const players = db.prepare(`
-    SELECT u.id, u.username, gp.character_id, c.name as char_name, c.avatar_url
+    SELECT u.id, u.username, gp.character_id, c.name as char_name, c.avatar_url,
+           json_extract(c.sheet_data, '$.race') as char_race
     FROM game_players gp
     JOIN users u ON u.id = gp.user_id
     LEFT JOIN characters c ON c.id = gp.character_id
@@ -160,6 +167,12 @@ router.post('/:id/end', (req: AuthRequest, res: Response) => {
     );
   }
   db.prepare("UPDATE games SET status = 'lobby', current_session_id = NULL WHERE id = ?").run(req.params.id);
+  // Release any prebuilt character selections so they're available for the next session
+  db.prepare(`
+    UPDATE game_players SET character_id = NULL
+    WHERE game_id = ? AND character_id IN (SELECT id FROM characters WHERE game_id = ?)
+  `).run(req.params.id, req.params.id);
+  (req.app.locals.io as any).to(`game:${req.params.id}`).emit('session_ended');
   res.json({ status: 'lobby' });
 });
 
@@ -182,9 +195,10 @@ router.get('/:id/game-characters', (req: AuthRequest, res: Response) => {
   if (!isMember) return res.status(403).json({ error: 'Not a member' });
 
   const chars = db.prepare(`
-    SELECT c.*, u.username as claimed_by_username
+    SELECT c.*, gp.user_id as used_by_id, u.username as used_by_username
     FROM characters c
-    LEFT JOIN users u ON u.id = c.claimed_by
+    LEFT JOIN game_players gp ON gp.character_id = c.id AND gp.game_id = c.game_id
+    LEFT JOIN users u ON u.id = gp.user_id
     WHERE c.game_id = ?
     ORDER BY c.created_at ASC
   `).all(req.params.id);
@@ -233,45 +247,28 @@ router.delete('/:id/game-characters/:charId', (req: AuthRequest, res: Response) 
   res.json({ deleted: true });
 });
 
-// Claim a pre-built game character (one per character — first come first served)
+// Select a pre-built game character for this session (session-scoped, no permanent claim)
 router.post('/:id/game-characters/:charId/claim', (req: AuthRequest, res: Response) => {
   const game = db.prepare('SELECT * FROM games WHERE id = ?').get(req.params.id) as any;
   if (!game) return res.status(404).json({ error: 'Not found' });
-  if (game.dm_id === req.user!.id) return res.status(400).json({ error: 'DM cannot claim characters' });
+  if (game.dm_id === req.user!.id) return res.status(400).json({ error: 'DM cannot play a character' });
 
-  const template = db.prepare('SELECT * FROM characters WHERE id = ? AND game_id = ?').get(req.params.charId, req.params.id) as any;
-  if (!template) return res.status(404).json({ error: 'Game character not found' });
+  const char = db.prepare('SELECT * FROM characters WHERE id = ? AND game_id = ?').get(req.params.charId, req.params.id) as any;
+  if (!char) return res.status(404).json({ error: 'Character not found' });
 
-  // Already claimed by this player — return their existing copy
-  if (template.claimed_by === req.user!.id) {
-    const existing = db.prepare(`
-      SELECT c.* FROM characters c
-      JOIN game_players gp ON gp.character_id = c.id
-      WHERE gp.game_id = ? AND gp.user_id = ? AND c.game_id IS NULL
-    `).get(req.params.id, req.user!.id) as any;
-    if (existing) return res.json({ ...existing, sheet_data: JSON.parse(existing.sheet_data) });
-  }
+  // Block if another player already has this character selected for this game
+  const inUse = db.prepare(
+    'SELECT user_id FROM game_players WHERE game_id = ? AND character_id = ? AND user_id != ?'
+  ).get(req.params.id, req.params.charId, req.user!.id) as any;
+  if (inUse) return res.status(409).json({ error: 'Another player is already using this character' });
 
-  // Claimed by someone else
-  if (template.claimed_by && template.claimed_by !== req.user!.id) {
-    return res.status(409).json({ error: 'This character has already been claimed by another player' });
-  }
+  db.prepare(`
+    INSERT INTO game_players (game_id, user_id, character_id)
+    VALUES (?, ?, ?)
+    ON CONFLICT(game_id, user_id) DO UPDATE SET character_id = excluded.character_id
+  `).run(req.params.id, req.user!.id, req.params.charId);
 
-  const newId = uuidv4();
-  db.prepare('INSERT INTO characters (id, user_id, name, sheet_data) VALUES (?, ?, ?, ?)').run(
-    newId, req.user!.id, template.name, template.sheet_data
-  );
-  if (template.avatar_url) {
-    db.prepare('UPDATE characters SET avatar_url = ? WHERE id = ?').run(template.avatar_url, newId);
-  }
-
-  db.prepare('UPDATE characters SET claimed_by = ? WHERE id = ?').run(req.user!.id, template.id);
-
-  db.prepare('INSERT INTO game_players (game_id, user_id, character_id) VALUES (?, ?, ?) ON CONFLICT(game_id, user_id) DO UPDATE SET character_id = excluded.character_id')
-    .run(req.params.id, req.user!.id, newId);
-
-  const newChar = db.prepare('SELECT * FROM characters WHERE id = ?').get(newId) as any;
-  res.json({ ...newChar, sheet_data: JSON.parse(newChar.sheet_data) });
+  res.json({ ...char, sheet_data: JSON.parse(char.sheet_data || '{}') });
 });
 
 // Party characters — readable by all game members

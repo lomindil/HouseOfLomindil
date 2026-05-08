@@ -42,7 +42,7 @@ function StatBadge({ label, value }: { label: string; value: string | number }) 
 }
 
 export default function PartyPanel({ gameId, isDM }: { gameId: string; isDM: boolean }) {
-  const { hpOverrides, onlinePlayers, game } = useGameStore();
+  const { hpOverrides, onlinePlayers, game, socket } = useGameStore();
   const { user } = useAuthStore();
   const [members, setMembers] = useState<PartyMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +146,29 @@ export default function PartyPanel({ gameId, isDM }: { gameId: string; isDM: boo
             {sheet && (
               <>
                 {maxHp > 0 && <HpBar current={currentHp} max={maxHp} />}
+                {isDM && m.character_id && maxHp > 0 && (
+                  <div className="flex items-center gap-1 mt-1">
+                    {[-5, -1].map(d => (
+                      <button
+                        key={d}
+                        onClick={() => socket?.emit('dm_adjust_hp', { characterId: m.character_id, userId: m.user_id, delta: d })}
+                        className="flex-1 py-0.5 text-xs rounded border border-red-900/60 text-red-400 hover:bg-red-900/20 transition-colors font-mono"
+                      >
+                        {d}
+                      </button>
+                    ))}
+                    <span className="text-xs text-tavern-muted font-serif px-1">{currentHp}</span>
+                    {[+1, +5].map(d => (
+                      <button
+                        key={d}
+                        onClick={() => socket?.emit('dm_adjust_hp', { characterId: m.character_id, userId: m.user_id, delta: d })}
+                        className="flex-1 py-0.5 text-xs rounded border border-green-900/60 text-green-400 hover:bg-green-900/20 transition-colors font-mono"
+                      >
+                        +{d}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div className="flex flex-wrap gap-1 mt-2">
                   {combat.ac != null && <StatBadge label="AC" value={combat.ac} />}

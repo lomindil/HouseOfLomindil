@@ -12,7 +12,7 @@ declare const io: (url: string, opts?: Record<string, unknown>) => any;
 // In prod, Express serves /socket.io directly.
 const SOCKET_URL = window.location.origin;
 
-export function useGameSocket(gameId: string) {
+export function useGameSocket(gameId: string, onSessionEnded?: () => void) {
   const { token } = useAuthStore();
   const { setSocket, addMessage, updateToken, addToken, removeToken, updateDrawings, updateFog, setPlayerOnline, setMap, setHpOverride, setActiveEncounter, updateEncounterCombatant, setEncounterRound } = useGameStore();
   const socketRef = useRef<any>(null);
@@ -91,6 +91,14 @@ export function useGameSocket(gameId: string) {
 
     socket.on('encounter_ended', () => {
       setActiveEncounter(null);
+    });
+
+    socket.on('session_ended', () => {
+      onSessionEnded?.();
+    });
+
+    socket.on('chat_cleared', () => {
+      useGameStore.getState().setMessages([]);
     });
 
     return () => {

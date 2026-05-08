@@ -25,13 +25,15 @@ router.get('/', (req: AuthRequest, res: Response) => {
 // Premade game characters from all games the user is a player in
 router.get('/premade', (req: AuthRequest, res: Response) => {
   const chars = db.prepare(`
-    SELECT c.id, c.name, c.avatar_url, c.sheet_data, c.claimed_by, c.game_id, c.created_at,
+    SELECT c.id, c.name, c.avatar_url, c.sheet_data, c.game_id, c.created_at,
            g.name AS game_name,
-           u.username AS claimed_by_username
+           gp_use.user_id AS used_by_id,
+           u.username AS used_by_username
     FROM characters c
     JOIN games g ON g.id = c.game_id
     JOIN game_players gp ON gp.game_id = c.game_id AND gp.user_id = ?
-    LEFT JOIN users u ON u.id = c.claimed_by
+    LEFT JOIN game_players gp_use ON gp_use.character_id = c.id AND gp_use.game_id = c.game_id
+    LEFT JOIN users u ON u.id = gp_use.user_id
     WHERE c.game_id IS NOT NULL
     ORDER BY g.name, c.created_at ASC
   `).all(req.user!.id);

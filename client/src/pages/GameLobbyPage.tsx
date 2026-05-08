@@ -131,9 +131,13 @@ export default function GameLobbyPage() {
       await api.post(`/games/${id}/end`, { footnotes: endNotes });
       toast.success('Session ended');
       setGame(g => g ? { ...g, status: 'lobby' } : g);
-      const { data } = await api.get(`/games/${id}/sessions`);
-      setSessions(data);
-      const n = data.length + 1;
+      const [sessRes, gcRes] = await Promise.all([
+        api.get(`/games/${id}/sessions`),
+        api.get(`/games/${id}/game-characters`),
+      ]);
+      setSessions(sessRes.data);
+      setGameCharacters(gcRes.data);
+      const n = sessRes.data.length + 1;
       setSessionName(`Session ${n}`);
       setShowEndDialog(false);
       setEndNotes('');
@@ -187,17 +191,26 @@ export default function GameLobbyPage() {
   // ── Characters ───────────────────────────────────────────────────────────────
   async function selectCharacter(charId: string) {
     setSelectedChar(charId);
-    await api.post('/games/join', { code: game!.join_code, character_id: charId || undefined });
+    await api.post('/games/join', { code: game!.join_code, character_id: charId });
+    // Release any prebuilt char the player had selected
+    setGameCharacters(prev => prev.map(gc =>
+      gc.used_by_id === user?.id ? { ...gc, used_by_id: null, used_by_username: null } : gc
+    ));
     toast.success('Character selected');
   }
 
-  async function claimGameCharacter(gcId: string) {
+  async function selectPrebuiltChar(gcId: string) {
     try {
       const { data } = await api.post(`/games/${id}/game-characters/${gcId}/claim`);
       setSelectedChar(data.id);
-      setCharacters(prev => [...prev.filter(c => c.name !== data.name), data]);
-      toast.success(`${data.name} claimed!`);
-    } catch (err: any) { toast.error(err?.response?.data?.error || 'Could not claim'); }
+      // Mark this char as used by me and release any previous selection from others
+      setGameCharacters(prev => prev.map(gc =>
+        gc.id === gcId
+          ? { ...gc, used_by_id: user?.id, used_by_username: user?.username }
+          : gc.used_by_id === user?.id ? { ...gc, used_by_id: null, used_by_username: null } : gc
+      ));
+      toast.success(`Playing as ${data.name} this session`);
+    } catch (err: any) { toast.error(err?.response?.data?.error || 'Character already taken'); }
   }
 
   function handleGCSaved(char: any) {
@@ -426,18 +439,18 @@ export default function GameLobbyPage() {
               <h2 className="font-serif text-tavern-gold mb-3 text-sm uppercase tracking-widest">Your Character</h2>
               {gameCharacters.length > 0 && (
                 <div className="mb-3">
-                  <p className="label mb-2">Pre-built by DM — claim one to play:</p>
+                  <p className="label mb-2">Pre-built by DM — pick one to play this session:</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                     {gameCharacters.map(gc => {
-                      const claimedByMe = gc.claimed_by === user?.id;
-                      const claimedByOther = gc.claimed_by && !claimedByMe;
+                      const isMyChar = selectedChar === gc.id;
+                      const takenByOther = gc.used_by_id && gc.used_by_id !== user?.id;
                       return (
                         <button key={gc.id}
-                          onClick={() => !claimedByOther ? claimGameCharacter(gc.id) : undefined}
-                          disabled={!!claimedByOther}
+                          onClick={() => !takenByOther ? selectPrebuiltChar(gc.id) : undefined}
+                          disabled={!!takenByOther}
                           className={clsx('border rounded p-2 text-left flex items-start gap-2 transition-colors',
-                            claimedByMe ? 'border-tavern-gold/60 bg-tavern-gold/5 hover:border-tavern-gold' :
-                            claimedByOther ? 'border-tavern-border/30 opacity-50 cursor-not-allowed' :
+                            isMyChar ? 'border-tavern-gold/60 bg-tavern-gold/5 hover:border-tavern-gold' :
+                            takenByOther ? 'border-tavern-border/30 opacity-50 cursor-not-allowed' :
                             'border-tavern-border hover:border-tavern-gold'
                           )}
                         >
@@ -446,8 +459,8 @@ export default function GameLobbyPage() {
                             <div className="text-sm font-serif text-tavern-text">{gc.name}</div>
                             <div className="text-xs text-tavern-muted">{gc.sheet_data?.race} {gc.sheet_data?.class}</div>
                             <div className="text-xs text-tavern-muted">HP {gc.sheet_data?.combat?.max_hp} · AC {gc.sheet_data?.combat?.ac}</div>
-                            {claimedByMe && <div className="text-xs text-tavern-gold mt-0.5">✓ Your character</div>}
-                            {claimedByOther && <div className="text-xs text-tavern-muted mt-0.5">Claimed by {gc.claimed_by_username}</div>}
+                            {isMyChar && <div className="text-xs text-tavern-gold mt-0.5">✓ Playing this session</div>}
+                            {takenByOther && <div className="text-xs text-tavern-muted mt-0.5">In use: {gc.used_by_username}</div>}
                           </div>
                         </button>
                       );
@@ -477,7 +490,7 @@ export default function GameLobbyPage() {
           {isDM && (
             <Section title="Pre-built Characters" icon={<BookOpen size={15} />} defaultOpen={true}>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-tavern-muted">Players claim these when joining.</p>
+                <p className="text-xs text-tavern-muted">Players pick one to play per session.</p>
                 <div className="flex gap-1.5">
                   <button onClick={() => setShowLibraryChars(v => !v)} title="Import from SRD Library"
                     className={clsx('flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors',
@@ -523,7 +536,7 @@ export default function GameLobbyPage() {
                           <div className="text-sm font-serif text-tavern-text truncate">{gc.name}</div>
                           <div className="text-xs text-tavern-muted">{gc.sheet_data?.race} {gc.sheet_data?.class}</div>
                           <div className="text-xs text-tavern-muted">HP {gc.sheet_data?.combat?.max_hp} · AC {gc.sheet_data?.combat?.ac}</div>
-                          {gc.claimed_by && <div className="text-xs text-tavern-gold/70 mt-0.5">Claimed: {gc.claimed_by_username}</div>}
+                          {gc.used_by_id && <div className="text-xs text-tavern-gold/70 mt-0.5">Playing: {gc.used_by_username}</div>}
                         </div>
                       </div>
                       <input type="file" accept="image/*" className="hidden"

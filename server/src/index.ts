@@ -40,6 +40,7 @@ const corsOrigin = process.env.NODE_ENV === 'production'
 const io = new Server(httpServer, {
   cors: { origin: corsOrigin, credentials: true },
 });
+app.locals.io = io;
 
 app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json({ limit: '10mb' }));

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../../store/game';
 import type { ChatMessage } from '../../store/game';
 import { useAuthStore } from '../../store/auth';
-import { Send, Dices } from 'lucide-react';
+import { Send, Dices, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 
 function MessageRow({ msg }: { msg: ChatMessage }) {
@@ -54,9 +54,11 @@ function MessageRow({ msg }: { msg: ChatMessage }) {
 }
 
 export default function ChatPanel() {
-  const { messages, socket } = useGameStore();
+  const { messages, socket, game } = useGameStore();
   const [input, setInput] = useState('');
+  const [confirmClear, setConfirmClear] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isDM = game?.is_dm ?? false;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -69,8 +71,32 @@ export default function ChatPanel() {
     setInput('');
   }
 
+  function clearChat() {
+    if (!confirmClear) { setConfirmClear(true); return; }
+    socket?.emit('clear_chat');
+    setConfirmClear(false);
+  }
+
   return (
     <div className="flex flex-col h-full">
+      {isDM && (
+        <div className="flex justify-end px-3 pt-2">
+          <button
+            onClick={clearChat}
+            onBlur={() => setConfirmClear(false)}
+            className={clsx(
+              'flex items-center gap-1 text-xs px-2 py-0.5 rounded border transition-colors',
+              confirmClear
+                ? 'border-red-700 text-red-400 bg-red-900/20'
+                : 'border-tavern-border text-tavern-muted hover:text-red-400 hover:border-red-900'
+            )}
+            title="Clear all chat messages"
+          >
+            <Trash2 size={10} />
+            {confirmClear ? 'Confirm clear?' : 'Clear chat'}
+          </button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-3 space-y-1 min-h-0">
         {messages.length === 0 ? (
           <div className="text-center text-tavern-muted text-xs font-serif py-4 italic">

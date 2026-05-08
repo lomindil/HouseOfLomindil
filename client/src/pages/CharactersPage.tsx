@@ -3,19 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Navbar from '../components/ui/Navbar';
 import api from '../lib/api';
-import { Plus, User, Trash2, Edit3, Zap, X, Dices, ExternalLink } from 'lucide-react';
-import clsx from 'clsx';
+import { Plus, User, Trash2, Edit3, Zap, X, Dices } from 'lucide-react';
 
 interface Character {
   id: string; name: string; avatar_url?: string;
   sheet_data: any; updated_at: number;
 }
-interface PremadeChar {
-  id: string; name: string; avatar_url?: string;
-  sheet_data: any; game_id: string; game_name: string;
-  claimed_by: string | null; claimed_by_username: string | null;
-}
-
 // ── D&D 5e Quick Builder data ─────────────────────────────────────────────────
 const CLASSES = ['Barbarian','Bard','Cleric','Druid','Fighter','Monk','Paladin','Ranger','Rogue','Sorcerer','Warlock','Wizard'];
 const RACES   = ['Dragonborn','Dwarf','Elf','Gnome','Half-Elf','Half-Orc','Halfling','Human','Tiefling','Aarakocra','Genasi','Goliath'];
@@ -204,19 +197,12 @@ function QuickBuildModal({ onClose, onBuild }: { onClose: () => void; onBuild: (
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function CharactersPage() {
   const [chars, setChars]         = useState<Character[]>([]);
-  const [premade, setPremade]     = useState<PremadeChar[]>([]);
   const [loading, setLoading]     = useState(true);
   const [showBuilder, setShowBuilder] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    Promise.all([
-      api.get('/characters'),
-      api.get('/characters/premade').catch(() => ({ data: [] })),
-    ]).then(([own, pre]) => {
-      setChars(own.data);
-      setPremade(pre.data);
-    }).finally(() => setLoading(false));
+    api.get('/characters').then(({ data }) => setChars(data)).finally(() => setLoading(false));
   }, []);
 
   async function deleteChar(id: string, name: string) {
@@ -230,15 +216,6 @@ export default function CharactersPage() {
     setShowBuilder(false);
     navigate('/characters/new', { state: { prebuilt: sheet } });
   }
-
-  // Group premade by game
-  const premadeByGame = premade.reduce<Record<string, { gameName: string; chars: PremadeChar[] }>>(
-    (acc, c) => {
-      if (!acc[c.game_id]) acc[c.game_id] = { gameName: c.game_name, chars: [] };
-      acc[c.game_id].chars.push(c);
-      return acc;
-    }, {}
-  );
 
   return (
     <div className="min-h-screen">
@@ -313,79 +290,6 @@ export default function CharactersPage() {
               </div>
             )}
 
-            {/* Premade characters from games */}
-            {Object.keys(premadeByGame).length > 0 && (
-              <div>
-                <div className="flex items-center gap-4 mb-5">
-                  <div className="flex-1 h-px bg-tavern-border/50" />
-                  <h2 className="font-serif text-tavern-muted text-xs uppercase tracking-widest whitespace-nowrap">Pre-built Characters from Your Games</h2>
-                  <div className="flex-1 h-px bg-tavern-border/50" />
-                </div>
-                <div className="space-y-6">
-                  {Object.entries(premadeByGame).map(([gameId, { gameName, chars: gameChars }]) => (
-                    <div key={gameId}>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Link to={`/games/${gameId}`} className="font-serif text-tavern-gold text-sm hover:underline flex items-center gap-1">
-                          {gameName} <ExternalLink size={11} />
-                        </Link>
-                        <span className="text-xs text-tavern-muted">({gameChars.length} characters)</span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {gameChars.map(gc => {
-                          const sheet = gc.sheet_data;
-                          const isMine = gc.claimed_by !== null && gc.claimed_by === gc.claimed_by; // will refine below
-                          const myChar = chars.find(c => c.name === gc.name && c.sheet_data?.class === sheet?.class);
-                          const isClaimedByMe = myChar !== undefined;
-                          const isClaimedByOther = gc.claimed_by !== null && !isClaimedByMe;
-
-                          return (
-                            <div key={gc.id} className={clsx(
-                              'border rounded p-3 transition-colors',
-                              isClaimedByOther ? 'border-tavern-border/40 opacity-60' :
-                              isClaimedByMe   ? 'border-tavern-gold/40 bg-tavern-gold/5' :
-                                               'border-tavern-border hover:border-tavern-gold/40'
-                            )}>
-                              <div className="flex items-center gap-2 mb-2">
-                                <div className="w-9 h-9 rounded-full bg-tavern-bg border border-tavern-border flex items-center justify-center overflow-hidden flex-shrink-0">
-                                  {gc.avatar_url
-                                    ? <img src={gc.avatar_url} alt="" className="w-full h-full object-cover" />
-                                    : <span className="text-base">🧙</span>}
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="font-serif text-sm text-tavern-text truncate">{gc.name}</p>
-                                  <p className="text-xs text-tavern-muted">{sheet?.race} {sheet?.class}{sheet?.level ? ` · Lv${sheet.level}` : ''}</p>
-                                </div>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                {isClaimedByMe ? (
-                                  <>
-                                    <span className="text-xs text-tavern-gold">✓ Claimed by you</span>
-                                    {myChar && (
-                                      <Link to={`/characters/${myChar.id}`} className="text-xs border border-tavern-border rounded px-2 py-0.5 hover:border-tavern-gold text-tavern-muted hover:text-tavern-gold transition-colors flex items-center gap-1">
-                                        <Edit3 size={10} /> Edit
-                                      </Link>
-                                    )}
-                                  </>
-                                ) : isClaimedByOther ? (
-                                  <span className="text-xs text-tavern-muted italic">Claimed by {gc.claimed_by_username || 'another player'}</span>
-                                ) : (
-                                  <>
-                                    <span className="text-xs text-green-400/80">Available</span>
-                                    <Link to={`/games/${gameId}`} className="text-xs border border-tavern-border rounded px-2 py-0.5 hover:border-tavern-gold text-tavern-muted hover:text-tavern-gold transition-colors">
-                                      Claim in game →
-                                    </Link>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         )}
       </main>

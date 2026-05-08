@@ -183,7 +183,8 @@ export function setupGameSocket(io: Server) {
       tokens[tokenIndex] = { ...token, x, y };
       db.prepare('UPDATE maps SET tokens = ? WHERE id = ?').run(JSON.stringify(tokens), mapId);
 
-      io.to(`game:${socket.gameId}`).emit('token_moved', { mapId, tokenId, x, y, movedBy: socket.user!.id });
+      // Broadcast to everyone else — sender already applied the move locally via storeUpdateToken
+      socket.broadcast.to(`game:${socket.gameId}`).emit('token_moved', { mapId, tokenId, x, y, movedBy: socket.user!.id });
     });
 
     // Token add: DM can add any token; players can only add their own
@@ -220,6 +221,13 @@ export function setupGameSocket(io: Server) {
       db.prepare('UPDATE maps SET tokens = ? WHERE id = ?').run(JSON.stringify(tokens), mapId);
 
       io.to(`game:${socket.gameId}`).emit('token_removed', { mapId, tokenId });
+    });
+
+    // DM clears chat
+    socket.on('clear_chat', () => {
+      if (!socket.gameId || !socket.isDM) return;
+      db.prepare('DELETE FROM chat_messages WHERE game_id = ?').run(socket.gameId);
+      io.to(`game:${socket.gameId}`).emit('chat_cleared');
     });
 
     // DM draws on map
@@ -282,6 +290,20 @@ export function setupGameSocket(io: Server) {
       );
       io.to(`game:${socket.gameId}`).emit('chat_message', { id: sysId, game_id: socket.gameId, user_id: null, username: 'System', type: 'system', content: sysMsg, metadata: {}, created_at: ts });
       io.to(`game:${socket.gameId}`).emit('encounter_started', { encounterId, name: enc.name, combatants, round: 1 });
+    });
+
+    // DM directly adjusts a player's HP from the party panel
+    socket.on('dm_adjust_hp', ({ characterId, userId, delta }: any) => {
+      if (!socket.gameId || !socket.isDM) return;
+      const row = db.prepare('SELECT * FROM characters WHERE id = ?').get(characterId) as any;
+      if (!row) return;
+      const sheet = JSON.parse(row.sheet_data || '{}');
+      const combat = sheet.combat || {};
+      const maxHp: number = combat.max_hp ?? 10;
+      const newHp = Math.max(0, Math.min(maxHp, (combat.current_hp ?? maxHp) + delta));
+      sheet.combat = { ...combat, current_hp: newHp };
+      db.prepare('UPDATE characters SET sheet_data = ?, updated_at = unixepoch() WHERE id = ?').run(JSON.stringify(sheet), characterId);
+      io.to(`game:${socket.gameId}`).emit('character_hp_update', { userId, characterId, current_hp: newHp, max_hp: maxHp });
     });
 
     socket.on('encounter_update', ({ encounterId, combatantId, current_hp, initiative, status }: any) => {

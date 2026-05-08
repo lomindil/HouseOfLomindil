@@ -6,6 +6,7 @@ export interface Token {
   userId?: string;
   label: string;
   avatarUrl?: string;
+  charRace?: string;
   color: string;
   x: number;
   y: number;
@@ -48,6 +49,7 @@ export interface Player {
   character_id?: string;
   char_name?: string;
   avatar_url?: string;
+  char_race?: string;
   online?: boolean;
 }
 

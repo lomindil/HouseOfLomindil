@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth';
 import api from '../../lib/api';
 import toast from 'react-hot-toast';
-import { LogOut, User, Sword, Home, KeyRound, X, Map, ShieldCheck } from 'lucide-react';
+import { LogOut, User, Sword, Home, KeyRound, X, Map, ShieldCheck, UserCog } from 'lucide-react';
 import clsx from 'clsx';
 
 function ChangePasswordModal({ onClose }: { onClose: () => void }) {
@@ -60,12 +60,67 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+function ChangeUsernameModal({ onClose }: { onClose: () => void }) {
+  const { user, setAuth } = useAuthStore();
+  const [value, setValue] = useState(user?.username ?? '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!value.trim() || value.trim() === user?.username) { onClose(); return; }
+    setSaving(true);
+    try {
+      const { data } = await api.patch('/auth/username', { username: value.trim() });
+      setAuth(data.user, data.token);
+      toast.success('Username updated');
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to update username');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-tavern-card border border-tavern-border rounded-lg w-full max-w-sm p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="font-serif text-tavern-gold text-lg">Change Username</h2>
+          <button onClick={onClose} className="text-tavern-muted hover:text-tavern-text"><X size={16} /></button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="label block mb-1">New Username</label>
+            <input
+              className="tavern-input"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              minLength={2}
+              maxLength={32}
+              required
+              autoFocus
+            />
+            <p className="text-xs text-tavern-muted mt-1">Must be unique. 2–32 characters.</p>
+          </div>
+          <div className="flex gap-2 justify-end pt-1">
+            <button type="button" onClick={onClose} className="btn-secondary text-sm" disabled={saving}>Cancel</button>
+            <button type="submit" className="btn-primary text-sm" disabled={saving || !value.trim()}>
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export default function Navbar() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showChangeUsername, setShowChangeUsername] = useState(false);
 
   function handleLogout() {
     logout();
@@ -126,6 +181,12 @@ export default function Navbar() {
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
                   <div className="absolute right-0 top-full mt-2 w-44 bg-tavern-card border border-tavern-border rounded-lg shadow-xl z-50 overflow-hidden">
                     <button
+                      onClick={() => { setShowUserMenu(false); setShowChangeUsername(true); }}
+                      className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-tavern-muted hover:text-tavern-text hover:bg-tavern-bg transition-colors"
+                    >
+                      <UserCog size={13} /> Change Username
+                    </button>
+                    <button
                       onClick={() => { setShowUserMenu(false); setShowChangePassword(true); }}
                       className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-tavern-muted hover:text-tavern-text hover:bg-tavern-bg transition-colors"
                     >
@@ -147,6 +208,7 @@ export default function Navbar() {
       </header>
 
       {showChangePassword && <ChangePasswordModal onClose={() => setShowChangePassword(false)} />}
+      {showChangeUsername && <ChangeUsernameModal onClose={() => setShowChangeUsername(false)} />}
     </>
   );
 }

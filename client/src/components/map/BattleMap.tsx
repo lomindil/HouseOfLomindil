@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Image as KImage, Line, Rect, Circle, Group, Text } from 'react-konva';
 import useImage from 'use-image';
 import Konva from 'konva';
@@ -8,7 +8,7 @@ import { useAuthStore } from '../../store/auth';
 import clsx from 'clsx';
 import { Move, Pen, Square, Minus, Eye, EyeOff, Eraser, ZoomIn, ZoomOut, RotateCcw, Circle as CircleIcon, Plus, Trash2, ImagePlus, Layers } from 'lucide-react';
 import api from '../../lib/api';
-import { getMonsterAvatar, avatarStyle } from '../../lib/avatars';
+import { getMonsterAvatar, getRaceAvatar, avatarStyle } from '../../lib/avatars';
 
 const MAP_UTILS = [
   { label: '🌲', name: 'Tree', color: '#2d6a1f' },
@@ -25,15 +25,27 @@ type Tool = 'select' | 'pen' | 'line' | 'rect' | 'circle' | 'fog' | 'fog-erase' 
 
 const COLORS = ['#ff4444', '#ff8800', '#ffff00', '#44ff44', '#4488ff', '#aa44ff', '#ffffff', '#888888'];
 
-function TokenShape({ token, isDraggable, onDragEnd }: {
+const TokenShape = React.memo(function TokenShape({ token, isDraggable, onDragEnd }: {
   token: Token;
   isDraggable: boolean;
   onDragEnd: (id: string, x: number, y: number) => void;
 }) {
   const [img] = useImage(token.avatarUrl || '');
   const r = token.size / 2;
-  // Detect single emoji (for map utility tokens)
+
+  // Emoji check — for map utility tokens (fire, door etc.)
   const isEmoji = /^\p{Extended_Pictographic}/u.test(token.label);
+
+  // For player/character tokens with no uploaded avatar, use race emoji
+  const raceFallback = !token.avatarUrl && !isEmoji && token.charRace
+    ? getRaceAvatar(token.charRace).emoji
+    : null;
+  const showRaceFallback = !!raceFallback;
+
+  // Label shown below the token (name)
+  const showNameTag = img || showRaceFallback;
+  // Text inside circle (only for pure emoji utility tokens with no image)
+  const innerText = isEmoji ? token.label : (!img && !showRaceFallback ? token.label : null);
   const innerFontSize = isEmoji ? Math.floor(r * 1.05) : 9;
 
   return (
@@ -41,18 +53,29 @@ function TokenShape({ token, isDraggable, onDragEnd }: {
       x={token.x} y={token.y}
       draggable={isDraggable}
       onDragEnd={(e) => {
-        e.cancelBubble = true; // prevent Stage's onDragEnd from firing
+        e.cancelBubble = true;
         onDragEnd(token.id, e.target.x(), e.target.y());
       }}
     >
-      {/* Background fill */}
+      {/* Background */}
       <Circle radius={r} fill={img ? '#1a1a2e' : token.color} opacity={0.92} />
-      {/* Avatar image — fills the circle */}
+      {/* Uploaded avatar image */}
       {img && <KImage image={img} x={-r} y={-r} width={token.size} height={token.size} cornerRadius={r} />}
-      {/* Emoji or abbreviated name centered inside circle */}
-      {!img && (
+      {/* Race emoji fallback — shown large like emoji utility tokens */}
+      {showRaceFallback && (
         <Text
-          text={token.label}
+          text={raceFallback!}
+          x={-r} y={-r}
+          width={token.size} height={token.size}
+          align="center" verticalAlign="middle"
+          fontSize={Math.floor(r * 1.05)}
+          fill="#ffffff"
+        />
+      )}
+      {/* Emoji utility token or plain name fallback */}
+      {innerText && (
+        <Text
+          text={innerText}
           x={-r} y={-r}
           width={token.size} height={token.size}
           align="center" verticalAlign="middle"
@@ -60,20 +83,32 @@ function TokenShape({ token, isDraggable, onDragEnd }: {
           fill="#ffffff"
         />
       )}
-      {/* White border ring */}
+      {/* Border ring */}
       <Circle radius={r} fill="transparent" stroke="rgba(255,255,255,0.75)" strokeWidth={1.5} />
-      {/* Name tag below (only for image tokens — emoji tokens are self-explanatory) */}
-      {img && (
+      {/* Name tag below for character/image tokens */}
+      {showNameTag && (
         <Text
           text={token.label}
           x={-r} y={r + 2}
           width={token.size} align="center"
-          fontSize={9} fill="rgba(255,255,255,0.85)"
+          fontSize={9} fill="rgba(255,255,255,0.9)"
         />
       )}
     </Group>
   );
-}
+}, (prev, next) =>
+  prev.isDraggable === next.isDraggable &&
+  prev.onDragEnd === next.onDragEnd &&
+  prev.token.id === next.token.id &&
+  prev.token.x === next.token.x &&
+  prev.token.y === next.token.y &&
+  prev.token.label === next.token.label &&
+  prev.token.color === next.token.color &&
+  prev.token.size === next.token.size &&
+  prev.token.userId === next.token.userId &&
+  prev.token.avatarUrl === next.token.avatarUrl &&
+  prev.token.charRace === next.token.charRace
+);
 
 function FogLayer({ fogData, gridSize, width, height, isDM }: {
   fogData: Record<string, boolean>;
@@ -125,6 +160,7 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
   const [fogData, setFogData] = useState<Record<string, boolean>>(map.fog_data || {});
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<number[]>([]);
+  const [fogBrushSize, setFogBrushSize] = useState(1);
   const [showAddToken, setShowAddToken] = useState(false);
   const [tokenLabel, setTokenLabel] = useState('');
   const [tokenColor, setTokenColor] = useState('#4488ff');
@@ -138,6 +174,17 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
   const [stageSize, setStageSize] = useState({ w: 800, h: 600 });
 
   const tokens = map.tokens || [];
+
+  function applyFogBrush(fog: Record<string, boolean>, col: number, row: number, add: boolean) {
+    const half = Math.floor(fogBrushSize / 2);
+    for (let dr = -half; dr <= half; dr++) {
+      for (let dc = -half; dc <= half; dc++) {
+        const key = `${col + dc},${row + dr}`;
+        if (add) fog[key] = true;
+        else delete fog[key];
+      }
+    }
+  }
 
   useEffect(() => { setDrawings(map.drawings || []); }, [map.drawings]);
   useEffect(() => { setFogData(map.fog_data || {}); }, [map.fog_data]);
@@ -177,10 +224,8 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
     if (tool === 'fog' || tool === 'fog-erase') {
       if (!isDM) return;
       const { col, row } = getCellFromPos(pos);
-      const key = `${col},${row}`;
       const next = { ...fogData };
-      if (tool === 'fog') next[key] = true;
-      else delete next[key];
+      applyFogBrush(next, col, row, tool === 'fog');
       setFogData(next);
       setIsDrawing(true);
       return;
@@ -199,10 +244,8 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
     if (tool === 'fog' || tool === 'fog-erase') {
       if (!isDM) return;
       const { col, row } = getCellFromPos(pos);
-      const key = `${col},${row}`;
       const next = { ...fogData };
-      if (tool === 'fog') next[key] = true;
-      else delete next[key];
+      applyFogBrush(next, col, row, tool === 'fog');
       setFogData(next);
       return;
     }
@@ -244,13 +287,12 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
     setCurrentPoints([]);
   }
 
-  function handleTokenDrag(tokenId: string, x: number, y: number) {
-    // x, y are already in map-space (Layer-local coords after Stage scale/offset applied by Konva)
+  const handleTokenDrag = useCallback((tokenId: string, x: number, y: number) => {
     if (socket) {
       socket.emit('token_move', { mapId: map.id, tokenId, x, y });
       storeUpdateToken(map.id, tokenId, x, y);
     }
-  }
+  }, [socket, map.id, storeUpdateToken]);
 
   function canMoveToken(token: Token) {
     return isDM || token.userId === user?.id;
@@ -307,6 +349,7 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
       color: '#4488ff',
       userId: user.id,
       avatarUrl: me?.avatar_url || undefined,
+      charRace: me?.char_race || undefined,
       x, y,
       size: TOKEN_SIZE,
     };
@@ -379,6 +422,14 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
               {icon}
             </button>
           ))}
+          {(tool === 'fog' || tool === 'fog-erase') && (
+            <span
+              title="Right-click map to cycle brush size"
+              className="text-xs text-tavern-gold font-serif bg-tavern-bg border border-tavern-gold/40 rounded px-1.5 py-1 select-none cursor-default"
+            >
+              {fogBrushSize}×{fogBrushSize}
+            </span>
+          )}
           <button onClick={() => { setShowAddToken(!showAddToken); setShowPresets(false); setTool('select'); }} title="Add Token"
             className={clsx('p-1.5 rounded border text-xs transition-colors',
               showAddToken ? 'border-tavern-gold text-tavern-gold' : 'border-tavern-border text-tavern-muted hover:text-tavern-text')}>
@@ -536,6 +587,13 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
             const delta = e.evt.deltaY > 0 ? -0.1 : 0.1;
             setScale((s) => Math.max(0.2, Math.min(4, s + delta)));
           }}
+          onContextMenu={(e) => {
+            e.evt.preventDefault();
+            if (tool === 'fog' || tool === 'fog-erase') {
+              const sizes = [1, 2, 3, 5, 7];
+              setFogBrushSize(s => sizes[(sizes.indexOf(s) + 1) % sizes.length]);
+            }
+          }}
         >
           {/* Map image */}
           <Layer>
@@ -579,9 +637,14 @@ export default function BattleMap({ map, isDM }: BattleMapProps) {
             <FogLayer fogData={fogData} gridSize={map.grid_size} width={imgWidth} height={imgHeight} isDM={isDM} />
           </Layer>
 
-          {/* Tokens */}
+          {/* Tokens — players cannot see tokens inside fogged cells */}
           <Layer>
-            {tokens.map((token) => (
+            {(isDM ? tokens : tokens.filter(t => {
+              if (t.userId === user?.id) return true;
+              const col = Math.floor(t.x / map.grid_size);
+              const row = Math.floor(t.y / map.grid_size);
+              return !fogData[`${col},${row}`];
+            })).map((token) => (
               <TokenShape
                 key={token.id}
                 token={token}

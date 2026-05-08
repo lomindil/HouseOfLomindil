@@ -162,6 +162,21 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res: Resp
   res.json({ ok: true });
 });
 
+router.patch('/username', authenticate, (req: AuthRequest, res: Response) => {
+  const { username } = req.body;
+  if (!username || username.trim().length < 2) {
+    return res.status(400).json({ error: 'Username must be at least 2 characters' });
+  }
+  const trimmed = username.trim();
+  const taken = db.prepare('SELECT id FROM users WHERE LOWER(username) = ? AND id != ?').get(trimmed.toLowerCase(), req.user!.id);
+  if (taken) return res.status(409).json({ error: 'Username already taken' });
+
+  db.prepare('UPDATE users SET username = ? WHERE id = ?').run(trimmed, req.user!.id);
+  const updated = db.prepare('SELECT id, email, username FROM users WHERE id = ?').get(req.user!.id) as any;
+  const token = signToken({ id: updated.id, email: updated.email, username: updated.username });
+  res.json({ user: updated, token });
+});
+
 router.get('/me', (req: Request, res: Response) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'No token' });

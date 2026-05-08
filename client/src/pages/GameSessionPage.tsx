@@ -29,7 +29,7 @@ export default function GameSessionPage() {
   const [endNotes, setEndNotes] = useState('');
   const [endingSession, setEndingSession] = useState(false);
 
-  useGameSocket(id!);
+  useGameSocket(id!, () => navigate(`/games/${id}`));
 
   useEffect(() => {
     Promise.all([
