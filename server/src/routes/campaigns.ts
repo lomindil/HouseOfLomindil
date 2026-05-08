@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../db';
 import { optionalAuth, authenticate, AuthRequest } from '../middleware/auth';
+import { sendArmyConfirmation, sendArmyAlert } from '../utils/mailer';
 
 const router = Router();
 
@@ -64,8 +65,8 @@ router.get('/:id', optionalAuth, (req: AuthRequest, res: Response) => {
 });
 
 // Sign up for campaign army — public (optional auth)
-router.post('/:id/army', optionalAuth, (req: AuthRequest, res: Response) => {
-  const game = db.prepare('SELECT id FROM games WHERE id = ? AND approved = 1').get(req.params.id) as any;
+router.post('/:id/army', optionalAuth, async (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT id, name FROM games WHERE id = ? AND approved = 1').get(req.params.id) as any;
   if (!game) return res.status(404).json({ error: 'Campaign not found' });
 
   const { display_name, email, phone, message } = req.body;
@@ -78,11 +79,20 @@ router.post('/:id/army', optionalAuth, (req: AuthRequest, res: Response) => {
   if (existing) return res.status(409).json({ error: 'You have already joined the Campaign Army for this game.' });
 
   const id = uuidv4();
+  const cleanName = display_name.trim();
+  const cleanEmail = email.toLowerCase().trim();
+  const cleanPhone = phone?.trim() || '';
+  const cleanMessage = message?.trim() || '';
+
   db.prepare(
     'INSERT INTO campaign_army (id, game_id, user_id, display_name, email, phone, message) VALUES (?,?,?,?,?,?,?)'
-  ).run(id, req.params.id, req.user?.id || null, display_name.trim(), email.toLowerCase().trim(), phone?.trim() || '', message?.trim() || '');
+  ).run(id, req.params.id, req.user?.id || null, cleanName, cleanEmail, cleanPhone, cleanMessage);
 
   res.json({ success: true });
+
+  // Fire emails after responding so signup isn't delayed
+  sendArmyConfirmation(cleanEmail, cleanName, game.name).catch(() => {});
+  sendArmyAlert(game.name, cleanName, cleanEmail, cleanPhone, cleanMessage).catch(() => {});
 });
 
 // Get campaign army — authenticated

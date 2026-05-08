@@ -317,8 +317,11 @@ export default function MapBuilderModal({ onClose, onSave, editMap }: Props) {
         {showSettings && (
           <div className="flex items-center gap-4 px-3 py-2 bg-tavern-bg border-b border-tavern-border flex-shrink-0 flex-wrap">
             <div className="flex items-center gap-2">
-              <label className="text-xs text-tavern-muted whitespace-nowrap">Grid: {gridSize}px</label>
-              <input type="range" min={20} max={120} step={4} value={gridSize} onChange={(e) => setGridSize(parseInt(e.target.value))} className="w-28 accent-yellow-500" />
+              <label className="text-xs text-tavern-muted whitespace-nowrap">Grid (px)</label>
+              <input type="range" min={5} max={300} step={1} value={gridSize} onChange={(e) => setGridSize(parseInt(e.target.value))} className="w-28 accent-yellow-500" />
+              <input type="number" min={5} max={300} step={1} value={gridSize}
+                onChange={(e) => setGridSize(Math.max(5, Math.min(300, parseInt(e.target.value) || 5)))}
+                className="w-14 text-center bg-tavern-card border border-tavern-border rounded text-xs text-tavern-text px-1 py-0.5 focus:outline-none focus:border-tavern-gold" />
               <span className="text-xs text-tavern-muted">{colCount}×{rowCount}</span>
             </div>
             <button onClick={() => setStamps([])} className="text-xs text-red-400 hover:text-red-300 border border-red-900/40 rounded px-2 py-0.5">Clear stamps</button>

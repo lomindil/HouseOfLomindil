@@ -3,8 +3,9 @@ import api from '../../lib/api';
 import { useGameStore } from '../../store/game';
 import { useAuthStore } from '../../store/auth';
 import clsx from 'clsx';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, ScrollText } from 'lucide-react';
 import { getRaceAvatar, avatarStyle } from '../../lib/avatars';
+import CharacterSheetModal from './CharacterSheetModal';
 
 interface PartyMember {
   user_id: string;
@@ -45,6 +46,7 @@ export default function PartyPanel({ gameId, isDM }: { gameId: string; isDM: boo
   const { user } = useAuthStore();
   const [members, setMembers] = useState<PartyMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sheetViewing, setSheetViewing] = useState<PartyMember | null>(null);
 
   async function load() {
     setLoading(true);
@@ -127,7 +129,18 @@ export default function PartyPanel({ gameId, isDM }: { gameId: string; isDM: boo
                 </div>
                 <div className="text-xs text-tavern-muted">{m.username}</div>
               </div>
-              <div className={clsx('w-2 h-2 rounded-full flex-shrink-0', isOnline ? 'bg-green-400' : 'bg-tavern-border')} title={isOnline ? 'Online' : 'Offline'} />
+              <div className="flex items-center gap-1.5">
+                {(isDM || isSelf) && sheet && (
+                  <button
+                    onClick={() => setSheetViewing(m)}
+                    className="text-tavern-muted hover:text-tavern-gold transition-colors"
+                    title="View character sheet"
+                  >
+                    <ScrollText size={13} />
+                  </button>
+                )}
+                <div className={clsx('w-2 h-2 rounded-full', isOnline ? 'bg-green-400' : 'bg-tavern-border')} title={isOnline ? 'Online' : 'Offline'} />
+              </div>
             </div>
 
             {sheet && (
@@ -166,6 +179,15 @@ export default function PartyPanel({ gameId, isDM }: { gameId: string; isDM: boo
 
       {!loading && members.length === 0 && (
         <p className="text-xs text-tavern-muted text-center italic py-2">No players have joined yet.</p>
+      )}
+
+      {sheetViewing && sheetViewing.sheet_data && (
+        <CharacterSheetModal
+          sheet={sheetViewing.sheet_data}
+          charName={sheetViewing.char_name || sheetViewing.username}
+          avatarUrl={sheetViewing.avatar_url}
+          onClose={() => setSheetViewing(null)}
+        />
       )}
     </div>
   );

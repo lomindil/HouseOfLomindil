@@ -42,13 +42,21 @@ export default function GameSessionPage() {
       // Load history
       setMessages(msgsRes.data);
 
-      // Load current map
-      if (g.current_map_id) {
-        const { data: mapData } = await api.get(`/games/${id}/maps/${g.current_map_id}`);
-        setMap(mapData);
-      } else if (g.maps?.length > 0) {
-        const { data: mapData } = await api.get(`/games/${id}/maps/${g.maps[0].id}`);
-        setMap(mapData);
+      // Load current map — fall back to first available if current_map_id is stale
+      const mapId = g.current_map_id || g.maps?.[0]?.id;
+      if (mapId) {
+        try {
+          const { data: mapData } = await api.get(`/games/${id}/maps/${mapId}`);
+          setMap(mapData);
+        } catch {
+          // current_map_id was stale; try the first map in the list
+          if (g.maps?.length > 0 && mapId !== g.maps[0].id) {
+            try {
+              const { data: mapData } = await api.get(`/games/${id}/maps/${g.maps[0].id}`);
+              setMap(mapData);
+            } catch { /* no maps available */ }
+          }
+        }
       }
 
       if (g.maps) setMapsList(g.maps);

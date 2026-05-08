@@ -22,6 +22,22 @@ router.get('/', (req: AuthRequest, res: Response) => {
   res.json(chars.map((c: any) => ({ ...c, sheet_data: JSON.parse(c.sheet_data) })));
 });
 
+// Premade game characters from all games the user is a player in
+router.get('/premade', (req: AuthRequest, res: Response) => {
+  const chars = db.prepare(`
+    SELECT c.id, c.name, c.avatar_url, c.sheet_data, c.claimed_by, c.game_id, c.created_at,
+           g.name AS game_name,
+           u.username AS claimed_by_username
+    FROM characters c
+    JOIN games g ON g.id = c.game_id
+    JOIN game_players gp ON gp.game_id = c.game_id AND gp.user_id = ?
+    LEFT JOIN users u ON u.id = c.claimed_by
+    WHERE c.game_id IS NOT NULL
+    ORDER BY g.name, c.created_at ASC
+  `).all(req.user!.id);
+  res.json(chars.map((c: any) => ({ ...c, sheet_data: JSON.parse(c.sheet_data) })));
+});
+
 router.post('/', (req: AuthRequest, res: Response) => {
   const { name, sheet_data } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });

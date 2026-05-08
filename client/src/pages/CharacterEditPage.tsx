@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Navbar from '../components/ui/Navbar';
 import api from '../lib/api';
@@ -42,10 +42,12 @@ function Section({ title, children }: SectionProps) {
 export default function CharacterEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sheet, setSheet] = useState<any>(null);
   const [charId, setCharId] = useState<string | null>(id || null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const avatarRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -57,9 +59,23 @@ export default function CharacterEditPage() {
         setAvatarUrl(data.avatar_url || null);
       }).catch(() => { toast.error('Character not found'); navigate('/characters'); });
     } else {
-      setSheet(emptySheet());
+      // Use quick-built sheet from navigation state if available
+      const prebuilt = (location.state as any)?.prebuilt;
+      setSheet(prebuilt ?? emptySheet());
     }
   }, [id]);
+
+  function validate(s: any): Record<string, string> {
+    const errs: Record<string, string> = {};
+    if (!s.name?.trim())            errs.name       = 'Name is required';
+    if (!s.race)                    errs.race       = 'Race is required';
+    if (!s.class)                   errs.class      = 'Class is required';
+    if (!s.background?.trim())      errs.background = 'Background is required';
+    if (!s.level || s.level < 1)   errs.level      = 'Level must be at least 1';
+    if (!s.combat?.max_hp || s.combat.max_hp < 1) errs.max_hp = 'Max HP must be at least 1';
+    if (s.combat?.ac == null || s.combat.ac < 1)  errs.ac     = 'AC is required';
+    return errs;
+  }
 
   function set(path: string, value: any) {
     setSheet((prev: any) => {
@@ -77,6 +93,13 @@ export default function CharacterEditPage() {
 
   async function save() {
     if (!sheet) return;
+    const errs = validate(sheet);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    setErrors({});
     setSaving(true);
     try {
       if (!charId || id === 'new') {
@@ -160,34 +183,34 @@ export default function CharacterEditPage() {
             {/* Identity */}
             <Section title="Identity">
               <div className="space-y-3">
-                {[
-                  { label: 'Name', path: 'name', placeholder: 'Thorin Ironfist' },
-                ].map(({ label, path, placeholder }) => (
-                  <div key={path}>
-                    <label className="label block mb-1">{label}</label>
-                    <input className="tavern-input" value={sheet[path] || ''} placeholder={placeholder}
-                      onChange={(e) => set(path, e.target.value)} />
-                  </div>
-                ))}
                 <div>
-                  <label className="label block mb-1">Race</label>
-                  <select className="tavern-input" value={sheet.race || ''} onChange={(e) => set('race', e.target.value)}>
+                  <label className="label block mb-1">Name *</label>
+                  <input className={`tavern-input ${errors.name ? 'border-red-600' : ''}`} value={sheet.name || ''} placeholder="Thorin Ironfist"
+                    onChange={(e) => set('name', e.target.value)} />
+                  {errors.name && <p className="text-xs text-red-400 mt-0.5">{errors.name}</p>}
+                </div>
+                <div>
+                  <label className="label block mb-1">Race *</label>
+                  <select className={`tavern-input ${errors.race ? 'border-red-600' : ''}`} value={sheet.race || ''} onChange={(e) => set('race', e.target.value)}>
                     <option value="">— Select Race —</option>
                     {RACES.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
+                  {errors.race && <p className="text-xs text-red-400 mt-0.5">{errors.race}</p>}
                 </div>
                 <div>
-                  <label className="label block mb-1">Class</label>
-                  <select className="tavern-input" value={sheet.class || ''} onChange={(e) => set('class', e.target.value)}>
+                  <label className="label block mb-1">Class *</label>
+                  <select className={`tavern-input ${errors.class ? 'border-red-600' : ''}`} value={sheet.class || ''} onChange={(e) => set('class', e.target.value)}>
                     <option value="">— Select Class —</option>
                     {CLASSES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
+                  {errors.class && <p className="text-xs text-red-400 mt-0.5">{errors.class}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="label block mb-1">Level</label>
-                    <input type="number" min={1} max={20} className="tavern-input" value={sheet.level || 1}
+                    <label className="label block mb-1">Level *</label>
+                    <input type="number" min={1} max={20} className={`tavern-input ${errors.level ? 'border-red-600' : ''}`} value={sheet.level || 1}
                       onChange={(e) => set('level', parseInt(e.target.value))} />
+                    {errors.level && <p className="text-xs text-red-400 mt-0.5">{errors.level}</p>}
                   </div>
                   <div>
                     <label className="label block mb-1">Prof Bonus</label>
@@ -196,9 +219,10 @@ export default function CharacterEditPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="label block mb-1">Background</label>
-                  <input className="tavern-input" value={sheet.background || ''} placeholder="Outlander"
+                  <label className="label block mb-1">Background *</label>
+                  <input className={`tavern-input ${errors.background ? 'border-red-600' : ''}`} value={sheet.background || ''} placeholder="Outlander"
                     onChange={(e) => set('background', e.target.value)} />
+                  {errors.background && <p className="text-xs text-red-400 mt-0.5">{errors.background}</p>}
                 </div>
                 <div>
                   <label className="label block mb-1">Alignment</label>
@@ -286,24 +310,30 @@ export default function CharacterEditPage() {
             <Section title="Combat">
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: 'AC', path: 'combat.ac' },
-                  { label: 'Initiative', path: 'combat.initiative' },
-                  { label: 'Speed', path: 'combat.speed' },
-                  { label: 'Max HP', path: 'combat.max_hp' },
-                  { label: 'Current HP', path: 'combat.current_hp' },
-                  { label: 'Temp HP', path: 'combat.temp_hp' },
-                ].map(({ label, path }) => (
-                  <div key={path} className="stat-box">
+                  { label: 'AC *', path: 'combat.ac', errKey: 'ac' },
+                  { label: 'Initiative', path: 'combat.initiative', errKey: '' },
+                  { label: 'Speed', path: 'combat.speed', errKey: '' },
+                  { label: 'Max HP *', path: 'combat.max_hp', errKey: 'max_hp' },
+                  { label: 'Current HP', path: 'combat.current_hp', errKey: '' },
+                  { label: 'Temp HP', path: 'combat.temp_hp', errKey: '' },
+                ].map(({ label, path, errKey }) => (
+                  <div key={path} className={`stat-box ${errKey && errors[errKey] ? 'border-red-600' : ''}`}>
                     <label className="label text-center">{label}</label>
                     <input
                       type="number"
                       className="w-full text-center bg-transparent text-tavern-text font-bold font-serif outline-none text-lg"
-                      value={path.split('.').reduce((o, k) => o?.[k], sheet) ?? 0}
+                      value={path.split('.').reduce((o: any, k: string) => o?.[k], sheet) ?? 0}
                       onChange={(e) => set(path, parseInt(e.target.value) || 0)}
                     />
                   </div>
                 ))}
               </div>
+              {(errors.ac || errors.max_hp) && (
+                <div className="mt-1 space-y-0.5">
+                  {errors.ac    && <p className="text-xs text-red-400">{errors.ac}</p>}
+                  {errors.max_hp && <p className="text-xs text-red-400">{errors.max_hp}</p>}
+                </div>
+              )}
               <div className="mt-2">
                 <label className="label block mb-1">Hit Dice</label>
                 <input className="tavern-input" value={sheet.combat?.hit_dice || '1d8'} placeholder="1d8"

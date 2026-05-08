@@ -131,6 +131,11 @@ router.post('/:id/launch', (req: AuthRequest, res: Response) => {
   const game = db.prepare('SELECT * FROM games WHERE id = ? AND dm_id = ?').get(req.params.id, req.user!.id) as any;
   if (!game) return res.status(403).json({ error: 'Not authorized' });
 
+  // If already active, just return success so the client can navigate in
+  if (game.status === 'active') {
+    return res.json({ status: 'active', join_code: game.join_code, session_id: game.current_session_id });
+  }
+
   const activeCount = (db.prepare("SELECT COUNT(*) as cnt FROM games WHERE status = 'active' AND id != ?").get(req.params.id) as any).cnt;
   if (activeCount >= 3) return res.status(409).json({ error: 'Maximum of 3 games can be active simultaneously' });
 

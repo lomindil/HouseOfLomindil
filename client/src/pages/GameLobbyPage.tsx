@@ -696,8 +696,17 @@ export default function GameLobbyPage() {
               {showMapForm && (
                 <form onSubmit={uploadMap} className="mb-3 space-y-2 p-3 bg-tavern-bg rounded border border-tavern-border">
                   <input className="tavern-input text-sm py-1.5" placeholder="Map name" value={mapName} onChange={(e) => setMapName(e.target.value)} required />
-                  <div><label className="label block mb-1">Grid Size (px)</label>
-                    <input type="number" min={20} max={200} className="tavern-input text-sm py-1.5" value={mapGrid} onChange={(e) => setMapGrid(parseInt(e.target.value))} /></div>
+                  <div>
+                    <label className="label block mb-1">Grid Size — {mapGrid}px</label>
+                    <div className="flex items-center gap-2">
+                      <input type="range" min={5} max={300} step={1} value={mapGrid}
+                        onChange={(e) => setMapGrid(parseInt(e.target.value))}
+                        className="flex-1 accent-yellow-500" />
+                      <input type="number" min={5} max={300} step={1} value={mapGrid}
+                        onChange={(e) => setMapGrid(Math.max(5, Math.min(300, parseInt(e.target.value) || 5)))}
+                        className="w-16 tavern-input text-sm py-1" />
+                    </div>
+                  </div>
                   <label className="flex items-center gap-2 cursor-pointer border border-dashed border-tavern-border rounded p-2 hover:border-tavern-gold transition-colors">
                     <Upload size={14} className="text-tavern-muted" />
                     <span className="text-sm text-tavern-muted">{mapFile ? mapFile.name : 'Upload map image'}</span>
