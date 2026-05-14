@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/auth';
 import {
   Play, Copy, Users, Map, Plus, Trash2, Upload, BookOpen, Hammer,
   Pencil, Skull, Swords, History, X, Camera, ChevronDown, ChevronUp,
-  Library, Download,
+  Library, Download, ScrollText,
 } from 'lucide-react';
 import MapBuilderModal from '../components/map/MapBuilderModal';
 import GameCharacterModal from '../components/game/GameCharacterModal';
@@ -360,21 +360,35 @@ export default function GameLobbyPage() {
             {game.description && <p className="text-tavern-muted mt-1">{game.description}</p>}
             <p className="text-xs text-tavern-muted mt-1">DM: {game.dm_username}</p>
           </div>
-          {isDM && (
-            <div className="flex gap-2 flex-wrap items-start">
-              {game.status === 'active' ? (
-                <>
-                  <button onClick={() => navigate(`/games/${id}/play`)} className="btn-primary flex items-center gap-2"><Play size={16} /> Enter Session</button>
-                  <button onClick={() => setShowEndDialog(true)} className="btn-danger text-sm py-2 px-4">End Session</button>
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <input className="tavern-input text-sm py-1.5 w-44" placeholder="Session name..." value={sessionName} onChange={(e) => setSessionName(e.target.value)} />
-                  <button onClick={launch} disabled={launching} className="btn-primary flex items-center gap-2">
-                    <Play size={16} /> {launching ? 'Starting...' : 'Launch Session'}
-                  </button>
-                </div>
-              )}
+          <div className="flex gap-2 flex-wrap items-start">
+            {isDM && (
+              <>
+                {game.status === 'active' ? (
+                  <>
+                    <button onClick={() => navigate(`/games/${id}/play`)} className="btn-primary flex items-center gap-2"><Play size={16} /> Enter Session</button>
+                    <button onClick={() => setShowEndDialog(true)} className="btn-danger text-sm py-2 px-4">End Session</button>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input className="tavern-input text-sm py-1.5 w-44" placeholder="Session name..." value={sessionName} onChange={(e) => setSessionName(e.target.value)} />
+                    <button onClick={launch} disabled={launching} className="btn-primary flex items-center gap-2">
+                      <Play size={16} /> {launching ? 'Starting...' : 'Launch Session'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            {!isDM && game.status === 'active' && (
+              <button onClick={() => navigate(`/games/${id}/play`)} className="btn-primary flex items-center gap-2"><Play size={16} /> Enter Game</button>
+            )}
+            <button
+              onClick={() => navigate(`/games/${id}/pbp`)}
+              className="btn-secondary flex items-center gap-2 text-sm"
+              title="Play by Post"
+            >
+              <ScrollText size={15} /> Play by Post
+            </button>
+            {isDM && (
               <button
                 onClick={() => setShowDeleteDialog(true)}
                 className="text-xs text-red-400/60 hover:text-red-400 border border-red-900/30 hover:border-red-800 px-3 py-2 rounded transition-colors"
@@ -382,36 +396,31 @@ export default function GameLobbyPage() {
               >
                 <Trash2 size={13} />
               </button>
-            </div>
-          )}
-          {!isDM && game.status === 'active' && (
-            <button onClick={() => navigate(`/games/${id}/play`)} className="btn-primary flex items-center gap-2"><Play size={16} /> Enter Game</button>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-          {/* Join Code — only shown during active session */}
-          {game.status === 'active' ? (
-            <div className="tavern-card p-4 border-green-900/40">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                <h2 className="font-serif text-green-400 text-sm uppercase tracking-widest">Join Code · Live</h2>
-              </div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="font-serif text-3xl tracking-widest text-tavern-text font-bold">{game.join_code}</span>
-                <button onClick={copyCode} className="text-tavern-muted hover:text-tavern-gold p-1"><Copy size={16} /></button>
-              </div>
-              <button onClick={copyJoinLink} className="btn-secondary w-full text-xs py-1.5 flex items-center justify-center gap-1">
-                <Copy size={12} /> Copy Join Link
-              </button>
+          {/* Join Code — always visible to DM, live indicator when session active */}
+          <div className={clsx('tavern-card p-4', game.status === 'active' && 'border-green-900/40')}>
+            <div className="flex items-center gap-2 mb-3">
+              {game.status === 'active' && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
+              <h2 className={clsx('font-serif text-sm uppercase tracking-widest', game.status === 'active' ? 'text-green-400' : 'text-tavern-gold')}>
+                Join Code{game.status === 'active' ? ' · Live' : ''}
+              </h2>
             </div>
-          ) : (
-            <div className="tavern-card p-4">
-              <h2 className="font-serif text-tavern-muted text-sm uppercase tracking-widest mb-2">Join Code</h2>
-              <p className="text-sm text-tavern-muted">Join code is only available during an active session.</p>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-serif text-3xl tracking-widest text-tavern-text font-bold">{game.join_code}</span>
+              <button onClick={copyCode} className="text-tavern-muted hover:text-tavern-gold p-1"><Copy size={16} /></button>
             </div>
-          )}
+            <p className="text-xs text-tavern-muted mb-3">
+              Players use this code to join live sessions <em>and</em> Play by Post.
+            </p>
+            <button onClick={copyJoinLink} className="btn-secondary w-full text-xs py-1.5 flex items-center justify-center gap-1">
+              <Copy size={12} /> Copy Join Link
+            </button>
+          </div>
 
           {/* Players */}
           <div className="tavern-card p-4">

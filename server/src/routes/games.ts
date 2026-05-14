@@ -4,6 +4,7 @@ import multer from 'multer';
 import path from 'path';
 import db from '../db';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { sendPbpInvite } from '../utils/mailer';
 
 const avatarStorage = multer.diskStorage({
   destination: path.join(__dirname, '../../uploads/avatars'),
@@ -297,6 +298,60 @@ router.get('/:id/party', (req: AuthRequest, res: Response) => {
     avatar_url: r.avatar_url,
     sheet_data: r.sheet_data ? JSON.parse(r.sheet_data) : null,
   })));
+});
+
+// PATCH /:id/party/:characterId/hp — DM adjusts HP directly in sheet (PBP context)
+router.patch('/:id/party/:characterId/hp', (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT dm_id FROM games WHERE id = ?').get(req.params.id) as any;
+  if (!game || game.dm_id !== req.user!.id) return res.status(403).json({ error: 'DM only' });
+
+  const { delta } = req.body;
+  if (typeof delta !== 'number') return res.status(400).json({ error: 'delta required' });
+
+  const char = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.characterId) as any;
+  if (!char) return res.status(404).json({ error: 'Character not found' });
+
+  const sheet = JSON.parse(char.sheet_data || '{}');
+  const combat = sheet.combat || {};
+  const maxHp = combat.max_hp || 0;
+  const newHp = Math.max(0, Math.min(maxHp || 999, (combat.current_hp || 0) + delta));
+  sheet.combat = { ...combat, current_hp: newHp };
+  db.prepare('UPDATE characters SET sheet_data = ? WHERE id = ?').run(JSON.stringify(sheet), req.params.characterId);
+  res.json({ character_id: req.params.characterId, current_hp: newHp, max_hp: maxHp });
+});
+
+// GET /:id/invite-list — players + campaign army emails (DM only)
+router.get('/:id/invite-list', (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT dm_id FROM games WHERE id = ?').get(req.params.id) as any;
+  if (!game || game.dm_id !== req.user!.id) return res.status(403).json({ error: 'DM only' });
+
+  const players = db.prepare(`
+    SELECT u.id, u.username, u.email FROM game_players gp
+    JOIN users u ON u.id = gp.user_id WHERE gp.game_id = ?
+  `).all(req.params.id);
+
+  const army = db.prepare(
+    'SELECT id, display_name, email FROM campaign_army WHERE game_id = ? ORDER BY created_at ASC'
+  ).all(req.params.id);
+
+  res.json({ players, army });
+});
+
+// POST /:id/send-invites — send PBP invitation emails (DM only)
+router.post('/:id/send-invites', async (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT * FROM games WHERE id = ? AND dm_id = ?').get(req.params.id, req.user!.id) as any;
+  if (!game) return res.status(403).json({ error: 'DM only' });
+
+  const { recipients } = req.body; // [{ name: string, email: string }]
+  if (!Array.isArray(recipients) || recipients.length === 0) return res.status(400).json({ error: 'No recipients' });
+
+  const gameUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/games/${req.params.id}/pbp`;
+  let sent = 0;
+  for (const r of recipients as { name: string; email: string }[]) {
+    if (!r.email) continue;
+    try { await sendPbpInvite(r.email, r.name || r.email, game.name, gameUrl, game.join_code); sent++; } catch {}
+  }
+  res.json({ sent });
 });
 
 router.put('/:id', (req: AuthRequest, res: Response) => {

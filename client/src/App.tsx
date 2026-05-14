@@ -14,6 +14,7 @@ import GameLobbyPage from './pages/GameLobbyPage';
 import JoinGamePage from './pages/JoinGamePage';
 import CampaignsPage from './pages/CampaignsPage';
 import AdminPage from './pages/AdminPage';
+import PlayByPostPage from './pages/PlayByPostPage';
 
 const GameSessionPage = lazy(() =>
   import('./pages/GameSessionPage').catch((err) => {
@@ -69,6 +70,7 @@ export default function App() {
         <Route path="/characters/new" element={<ProtectedRoute><CharacterEditPage /></ProtectedRoute>} />
         <Route path="/games" element={<ProtectedRoute><GamesPage /></ProtectedRoute>} />
         <Route path="/games/:id" element={<ProtectedRoute><GameLobbyPage /></ProtectedRoute>} />
+        <Route path="/games/:id/pbp" element={<ProtectedRoute><PlayByPostPage /></ProtectedRoute>} />
         <Route path="/games/:id/play" element={
           <ProtectedRoute>
             <ErrorBoundary>

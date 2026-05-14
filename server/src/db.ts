@@ -206,6 +206,43 @@ db.exec(`
   );
 `);
 
+// Play-by-post tables
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pbp_roll_allocations (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES pbp_sessions(id) ON DELETE CASCADE,
+    game_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    character_id TEXT,
+    allocated INTEGER DEFAULT 0,
+    used INTEGER DEFAULT 0,
+    label TEXT DEFAULT '',
+    UNIQUE(session_id, user_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS pbp_sessions (
+    id TEXT PRIMARY KEY,
+    game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    status TEXT DEFAULT 'active',
+    created_at INTEGER DEFAULT (unixepoch()),
+    ended_at INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS pbp_posts (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES pbp_sessions(id) ON DELETE CASCADE,
+    game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    username TEXT NOT NULL,
+    content TEXT DEFAULT '',
+    image_url TEXT,
+    post_type TEXT DEFAULT 'post',
+    created_at INTEGER DEFAULT (unixepoch()),
+    deleted INTEGER DEFAULT 0
+  );
+`);
+
 // Campaign army (interest/waitlist) table
 db.exec(`
   CREATE TABLE IF NOT EXISTS campaign_army (

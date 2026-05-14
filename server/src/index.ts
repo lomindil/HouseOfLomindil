@@ -17,10 +17,11 @@ import encountersRouter from './routes/encounters';
 import libraryRouter from './routes/library';
 import campaignsRouter from './routes/campaigns';
 import adminRouter from './routes/admin';
+import pbpRouter from './routes/pbp';
 import { setupGameSocket } from './socket/gameSocket';
 
 // Ensure upload directories exist
-['uploads/avatars', 'uploads/maps', 'uploads/tokens'].forEach((dir) => {
+['uploads/avatars', 'uploads/maps', 'uploads/tokens', 'uploads/pbp'].forEach((dir) => {
   fs.mkdirSync(path.join(__dirname, '..', dir), { recursive: true });
 });
 
@@ -57,6 +58,7 @@ app.use('/api/campaigns', campaignsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/games/:gameId', chatRouter);
 app.use('/api/upload', uploadRouter);
+app.use('/api/games/:gameId/pbp', pbpRouter);
 
 setupGameSocket(io);
 
