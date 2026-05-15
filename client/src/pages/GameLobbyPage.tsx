@@ -402,8 +402,8 @@ export default function GameLobbyPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-          {/* Join Code — always visible to DM, live indicator when session active */}
-          <div className={clsx('tavern-card p-4', game.status === 'active' && 'border-green-900/40')}>
+          {/* Join Code — DM only, always visible */}
+          {game.is_dm && <div className={clsx('tavern-card p-4', game.status === 'active' && 'border-green-900/40')}>
             <div className="flex items-center gap-2 mb-3">
               {game.status === 'active' && <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />}
               <h2 className={clsx('font-serif text-sm uppercase tracking-widest', game.status === 'active' ? 'text-green-400' : 'text-tavern-gold')}>
@@ -420,7 +420,7 @@ export default function GameLobbyPage() {
             <button onClick={copyJoinLink} className="btn-secondary w-full text-xs py-1.5 flex items-center justify-center gap-1">
               <Copy size={12} /> Copy Join Link
             </button>
-          </div>
+          </div>}
 
           {/* Players */}
           <div className="tavern-card p-4">

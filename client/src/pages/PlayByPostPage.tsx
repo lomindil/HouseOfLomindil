@@ -10,7 +10,7 @@ import { getRaceAvatar, avatarStyle } from '../lib/avatars';
 import {
   ArrowLeft, Plus, X, Send, ImageIcon, Trash2,
   BookOpen, Users, Lock, File, RefreshCw, ScrollText,
-  Dices, Mail, ChevronDown, KeyRound,
+  Dices, Mail, ChevronDown, KeyRound, ChevronRight, ChevronLeft,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -142,58 +142,107 @@ function RollPostCard({ post, isDM, onDelete }: { post: PbpPost; isDM: boolean; 
 
 // ── Text post card ─────────────────────────────────────────────────────────────
 
+function Timestamp({ ts }: { ts: number }) {
+  return (
+    <span className="text-[10px] text-tavern-muted/40 shrink-0">
+      {new Date(ts * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+    </span>
+  );
+}
+
+function DeleteButton({ isDM, onDelete }: { isDM: boolean; onDelete: () => void }) {
+  const [confirm, setConfirm] = useState(false);
+  if (!isDM) return null;
+  return (
+    <div className="absolute -top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+      {confirm ? (
+        <div className="flex items-center gap-1 bg-[#1a0505] border border-red-900/60 rounded px-2 py-1 text-xs shadow-lg">
+          <span className="text-red-400/80">Remove?</span>
+          <button onClick={onDelete} className="text-red-400 hover:text-red-300 font-bold ml-1">Yes</button>
+          <span className="text-tavern-muted/40">/</span>
+          <button onClick={() => setConfirm(false)} className="text-tavern-muted hover:text-tavern-text">No</button>
+        </div>
+      ) : (
+        <button onClick={() => setConfirm(true)} className="p-1 bg-[#0d0805] border border-tavern-border/60 rounded text-tavern-muted/40 hover:text-red-400 hover:border-red-900/60 transition-colors">
+          <Trash2 size={10} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 function PostCard({ post, isDM, isOwn, dmId, onDelete }: { post: PbpPost; isDM: boolean; isOwn: boolean; dmId: string; onDelete: () => void }) {
   const isFromDM = post.user_id === dmId;
-  const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // ── DM narrative post — full-width parchment block ──
+  if (isFromDM) {
+    return (
+      <div className="group relative">
+        <div className="rounded-lg overflow-hidden border border-[#6b4c10]/60 bg-[#1e1100]"
+             style={{ borderLeft: '4px solid #c9962a' }}>
+          <div className="flex items-center gap-2 px-4 pt-3 pb-2 border-b border-[#3d2a08]/60">
+            <div className="w-5 h-5 rounded-full bg-tavern-gold/25 border border-tavern-gold/50 flex items-center justify-center text-[9px] text-tavern-gold font-serif font-bold shrink-0">
+              DM
+            </div>
+            <span className="text-xs font-serif text-tavern-gold tracking-wide">{post.username}</span>
+            <Timestamp ts={post.created_at} />
+          </div>
+          <div className="px-5 py-4">
+            {post.content && (
+              <p className="font-serif text-[15px] text-[#eeddc0] leading-[1.75] whitespace-pre-wrap italic">
+                {post.content}
+              </p>
+            )}
+            {post.image_url && (
+              <div className={clsx(post.content && 'mt-3')}>
+                <img src={post.image_url} alt="" className="max-w-full max-h-80 rounded border border-[#6b4c10]/40 object-contain" />
+              </div>
+            )}
+          </div>
+        </div>
+        <DeleteButton isDM={isDM} onDelete={onDelete} />
+      </div>
+    );
+  }
+
+  // ── Player chat bubble ──
   return (
-    <div className={clsx('group relative flex gap-3', isOwn && 'flex-row-reverse')}>
+    <div className={clsx('group relative flex items-end gap-2.5', isOwn && 'flex-row-reverse')}>
+      {/* Avatar */}
       <div className={clsx(
-        'w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center border text-sm font-serif font-bold select-none',
-        isFromDM ? 'bg-tavern-gold/20 border-tavern-gold/50 text-tavern-gold' : 'bg-tavern-bg border-tavern-border text-tavern-muted',
+        'w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-xs font-serif font-bold border',
+        isOwn
+          ? 'bg-[#0e1f10] border-[#2d5020] text-[#7ec87e]'
+          : 'bg-[#1c1005] border-[#5a3a18] text-tavern-muted',
       )}>
         {post.username[0].toUpperCase()}
       </div>
 
-      <div className={clsx('flex-1 min-w-0', isOwn && 'flex flex-col items-end')}>
-        <div className={clsx('flex items-baseline gap-2 mb-1', isOwn && 'flex-row-reverse')}>
-          <span className={clsx('text-xs font-serif', isFromDM ? 'text-tavern-gold' : 'text-tavern-text')}>
-            {post.username}{isFromDM && <span className="ml-1 text-tavern-muted/60">(DM)</span>}
-          </span>
-          <span className="text-xs text-tavern-muted/50">
-            {new Date(post.created_at * 1000).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-          </span>
+      <div className={clsx('flex flex-col gap-1 min-w-0 max-w-[78%]', isOwn && 'items-end')}>
+        {/* Meta */}
+        <div className={clsx('flex items-center gap-2', isOwn && 'flex-row-reverse')}>
+          <span className="text-xs font-serif text-tavern-muted">{post.username}</span>
+          <Timestamp ts={post.created_at} />
         </div>
-        <div className={clsx('rounded-lg px-4 py-3 max-w-[88%]',
-          isFromDM ? 'bg-tavern-gold/10 border border-tavern-gold/25'
-            : isOwn ? 'bg-tavern-card border border-tavern-border rounded-br-none'
-            : 'bg-tavern-bg border border-tavern-border rounded-bl-none',
+        {/* Bubble */}
+        <div className={clsx(
+          'rounded-2xl px-4 py-2.5',
+          isOwn
+            ? 'bg-[#111f0d] border border-[#2d5020] text-[#d8eed8] rounded-br-sm'
+            : 'bg-[#201206] border border-[#4a2e12] text-tavern-text rounded-bl-sm',
         )}>
-          {post.content && <p className="text-sm text-tavern-text whitespace-pre-wrap leading-relaxed">{post.content}</p>}
+          {post.content && (
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{post.content}</p>
+          )}
           {post.image_url && (
             <div className={clsx(post.content && 'mt-2')}>
-              <img src={post.image_url} alt="Post image" className="max-w-full max-h-72 rounded border border-tavern-border/40 object-contain" />
+              <img src={post.image_url} alt="" className="max-w-full max-h-64 rounded border border-[#4a2e12]/40 object-contain" />
             </div>
           )}
         </div>
       </div>
 
-      {isDM && (
-        <div className="absolute -top-1 right-0 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-          {confirmDelete ? (
-            <div className="flex items-center gap-1 bg-tavern-card border border-red-900/60 rounded px-2 py-1 text-xs shadow-md">
-              <span className="text-red-400 mr-0.5">Remove?</span>
-              <button onClick={onDelete} className="text-red-400 hover:text-red-300 font-semibold">Yes</button>
-              <span className="text-tavern-muted">/</span>
-              <button onClick={() => setConfirmDelete(false)} className="text-tavern-muted hover:text-tavern-text">No</button>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmDelete(true)} className="p-1 bg-tavern-card border border-tavern-border rounded text-tavern-muted hover:text-red-400 hover:border-red-900/60 transition-colors shadow">
-              <Trash2 size={11} />
-            </button>
-          )}
-        </div>
-      )}
+      <DeleteButton isDM={isDM} onDelete={onDelete} />
     </div>
   );
 }
@@ -579,6 +628,7 @@ export default function PlayByPostPage() {
 
   // ── Sidebar ──
   const [sideTab, setSideTab] = useState<SideTab>('party');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // ── Post form ──
   const [content, setContent] = useState('');
@@ -610,30 +660,29 @@ export default function PlayByPostPage() {
   // ── Initial load ──
   useEffect(() => {
     if (!gameId) return;
-    api.get(`/games/${gameId}`).then(gameRes => {
-      setGame(gameRes.data);
-      return Promise.all([
-        api.get(`/games/${gameId}/pbp/sessions`),
-        api.get(`/games/${gameId}/handouts`),
-        api.get(`/games/${gameId}/party`),
-      ]).then(([sessRes, handoutsRes, partyRes]) => {
+    (async () => {
+      try {
+        const gameRes = await api.get(`/games/${gameId}`);
+        setGame(gameRes.data);
+        const [sessRes, handoutsRes, partyRes] = await Promise.all([
+          api.get(`/games/${gameId}/pbp/sessions`),
+          api.get(`/games/${gameId}/handouts`),
+          api.get(`/games/${gameId}/party`),
+        ]);
         const sess: PbpSession[] = sessRes.data;
         setSessions(sess);
-
         const initial = sess.find(s => s.status === 'active') ?? sess[sess.length - 1] ?? null;
         setViewSession(initial);
-        if (initial) {
-          loadPosts(initial.id);
-          loadAllocations(initial.id);
-        }
-
+        if (initial) { loadPosts(initial.id); loadAllocations(initial.id); }
         const allHandouts: any[] = handoutsRes.data;
         setHandouts(gameRes.data.is_dm ? allHandouts : allHandouts.filter((h: any) => h.shared_with?.includes(user?.id)));
         setPartyMembers(partyRes.data);
-      });
-    }).catch((err: any) => {
-      if (err?.response?.status === 403) setNotMember(true);
-    }).finally(() => setLoading(false));
+      } catch (err: any) {
+        if (err?.response?.status === 403) setNotMember(true);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [gameId]);
 
   useEffect(() => {
@@ -861,101 +910,115 @@ export default function PlayByPostPage() {
 
       {/* Sub-header */}
       <div className="border-b border-tavern-border bg-tavern-card/50 backdrop-blur sticky top-14 z-40">
-        <div className="max-w-7xl mx-auto px-4 h-10 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 text-sm overflow-hidden">
+        <div className="px-4 h-11 flex items-center justify-between gap-3">
+          {/* Left: breadcrumb */}
+          <div className="flex items-center gap-2 text-sm overflow-hidden min-w-0">
             <Link to={`/games/${gameId}`} className="text-tavern-muted hover:text-tavern-text flex items-center gap-1 shrink-0">
               <ArrowLeft size={13} /> Lobby
             </Link>
             <span className="text-tavern-border/60">›</span>
             <span className="text-tavern-muted truncate">{game.name}</span>
-            <span className="text-tavern-border/60">›</span>
-            <span className="text-tavern-gold font-serif shrink-0">Play by Post</span>
+            <span className="text-tavern-border/60 hidden sm:inline">›</span>
+            <span className="text-tavern-gold font-serif shrink-0 hidden sm:inline">Play by Post</span>
           </div>
 
-          {isDM && (
-            <div className="flex items-center gap-2 shrink-0">
-              {sessions.length > 0 && (
+          {/* Right: DM controls + sidebar toggle */}
+          <div className="flex items-center gap-2 shrink-0">
+            {isDM && (
+              <>
+                {sessions.length > 0 && (
+                  <button onClick={() => setShowInvite(true)}
+                    className="flex items-center gap-1.5 text-xs border border-tavern-border text-tavern-muted hover:text-tavern-gold hover:border-tavern-gold/50 px-2.5 py-1.5 rounded transition-colors">
+                    <Mail size={11} /> Invite
+                  </button>
+                )}
+                {viewSession?.status === 'active' && (
+                  <button onClick={closeSession}
+                    className="flex items-center gap-1.5 text-xs border border-tavern-border text-tavern-muted hover:text-red-400 hover:border-red-900/60 px-2.5 py-1.5 rounded transition-colors">
+                    <Lock size={11} /> Close
+                  </button>
+                )}
                 <button
-                  onClick={() => setShowInvite(true)}
-                  className="flex items-center gap-1.5 text-xs border border-tavern-border text-tavern-muted hover:text-tavern-gold hover:border-tavern-gold/50 px-3 py-1.5 rounded transition-colors"
-                >
-                  <Mail size={11} /> Invite
+                  onClick={() => { setShowNewSession(true); setNewSessionName(`Chapter ${sessions.length + 1}`); }}
+                  className="flex items-center gap-1.5 text-xs btn-primary py-1.5 px-2.5">
+                  <Plus size={11} /> New Session
                 </button>
-              )}
-              {viewSession?.status === 'active' && (
-                <button
-                  onClick={closeSession}
-                  className="flex items-center gap-1.5 text-xs border border-tavern-border text-tavern-muted hover:text-red-400 hover:border-red-900/60 px-3 py-1.5 rounded transition-colors"
-                >
-                  <Lock size={11} /> Close Session
-                </button>
-              )}
-              <button
-                onClick={() => { setShowNewSession(true); setNewSessionName(`Chapter ${sessions.length + 1}`); }}
-                className="flex items-center gap-1.5 text-xs btn-primary py-1.5 px-3"
-              >
-                <Plus size={11} /> New Session
-              </button>
-            </div>
-          )}
+              </>
+            )}
+            {/* Sidebar toggle */}
+            <button
+              onClick={() => setSidebarOpen(v => !v)}
+              title={sidebarOpen ? 'Hide panel' : 'Show panel'}
+              className={clsx(
+                'flex items-center gap-1 text-xs border rounded px-2.5 py-1.5 transition-colors',
+                sidebarOpen
+                  ? 'border-tavern-gold/40 text-tavern-gold bg-tavern-gold/5 hover:bg-tavern-gold/10'
+                  : 'border-tavern-border text-tavern-muted hover:text-tavern-text hover:border-tavern-border/80',
+              )}>
+              {sidebarOpen ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+              <span className="hidden sm:inline">{sidebarOpen ? 'Hide' : 'Party & Dice'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 flex max-w-7xl mx-auto w-full px-4 py-4 gap-4">
+      {/* Body — full width, no max-w cap */}
+      <div className="flex-1 flex w-full min-h-0 overflow-hidden">
 
-        {/* ── Left: posts column ── */}
-        <div className="flex-1 flex flex-col gap-3 min-w-0">
+        {/* ── Posts column ── */}
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden px-4 py-3 gap-2">
 
           {/* Session tabs */}
           {sessions.length > 0 && (
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 shrink-0">
               {sessions.map(s => (
                 <button key={s.id} onClick={() => switchSession(s)}
                   className={clsx(
-                    'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border whitespace-nowrap transition-colors shrink-0',
+                    'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border whitespace-nowrap transition-all shrink-0',
                     viewSession?.id === s.id
-                      ? 'border-tavern-gold/60 text-tavern-gold bg-tavern-gold/5'
-                      : 'border-tavern-border text-tavern-muted hover:text-tavern-text hover:border-tavern-border/80',
+                      ? 'border-tavern-gold bg-tavern-gold/15 text-tavern-gold-light font-semibold shadow-[0_0_8px_rgba(201,150,42,0.2)]'
+                      : 'border-[#3a2010] bg-[#130a04] text-tavern-muted hover:text-tavern-text hover:border-[#5a3a18]',
                   )}>
                   {s.status === 'active'
-                    ? <div className="w-1.5 h-1.5 rounded-full bg-green-400 shrink-0" />
-                    : <Lock size={9} className="shrink-0" />}
+                    ? <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shrink-0" />
+                    : <Lock size={9} className="shrink-0 opacity-50" />}
                   {s.name}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Posts feed */}
-          <div className="flex-1 tavern-card overflow-y-auto p-4" style={{ minHeight: '300px', maxHeight: 'calc(100vh - 320px)' }}>
+          {/* Posts feed — distinct dark background, left-aligned content */}
+          <div className="flex-1 overflow-y-auto min-h-0 p-5" style={{ background: '#070402' }}>
             {!viewSession ? (
-              <div className="flex flex-col items-center justify-center h-48 text-center">
+              <div className="flex flex-col items-center justify-center h-full min-h-48 text-center">
                 <div className="text-5xl mb-4">📜</div>
-                <p className="font-serif text-tavern-muted mb-1">
+                <p className="font-serif text-tavern-muted text-base mb-1">
                   {isDM ? 'No sessions yet. Start the chronicle.' : 'Awaiting your Dungeon Master to open the first session.'}
                 </p>
                 {isDM && (
                   <button onClick={() => { setShowNewSession(true); setNewSessionName('Chapter 1'); }}
-                    className="btn-primary mt-4 text-sm flex items-center gap-2">
+                    className="btn-primary mt-5 text-sm flex items-center gap-2">
                     <Plus size={14} /> Begin the Tale
                   </button>
                 )}
               </div>
             ) : postsLoading ? (
-              <div className="text-center py-12 text-tavern-muted font-serif animate-pulse">Loading posts...</div>
+              <div className="text-center py-16 text-tavern-muted font-serif animate-pulse">Loading posts...</div>
             ) : posts.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="font-serif text-tavern-muted italic">The page is blank, awaiting the first words...</p>
+              <div className="text-center py-16">
+                <p className="font-serif text-tavern-muted italic text-base">The page is blank, awaiting the first words...</p>
                 {isDM && viewSession.status === 'active' && (
-                  <p className="text-xs text-tavern-muted/60 mt-1">Write the introductory post below.</p>
+                  <p className="text-xs text-tavern-muted/50 mt-2">Write the introductory post below.</p>
                 )}
               </div>
             ) : (
               <div className="space-y-5">
                 {posts.map(post =>
                   post.post_type === 'roll' ? (
-                    <RollPostCard key={post.id} post={post} isDM={isDM} onDelete={() => deletePost(post.id)} />
+                    <div key={post.id} className="flex justify-center">
+                      <RollPostCard post={post} isDM={isDM} onDelete={() => deletePost(post.id)} />
+                    </div>
                   ) : (
                     <PostCard
                       key={post.id}
@@ -972,20 +1035,21 @@ export default function PlayByPostPage() {
             )}
           </div>
 
-          {/* Post form (active session only) */}
+          {/* Post form — sits below the feed, clearly separated */}
           {viewSession && canPost && (
-            <form onSubmit={submitPost} className="tavern-card p-3 space-y-2">
+            <form onSubmit={submitPost}
+              className="shrink-0 border-t-2 border-[#2a1808] bg-[#0f0804] px-4 py-3 space-y-2">
               <textarea
-                className="tavern-input resize-none text-sm w-full"
+                className="w-full resize-none rounded-lg border border-[#3a2010] bg-[#160c05] text-tavern-text placeholder-tavern-muted/30 px-3 py-2.5 text-sm focus:outline-none focus:border-tavern-gold/50 focus:ring-1 focus:ring-tavern-gold/15 leading-relaxed"
                 rows={3}
-                placeholder="Write your post... (Ctrl+Enter to send)"
+                placeholder="Write your post… (Ctrl+Enter to send)"
                 value={content}
                 onChange={e => setContent(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submitPost(e as any); }}
               />
               {imagePreview && (
                 <div className="relative inline-block">
-                  <img src={imagePreview} alt="Preview" className="max-h-28 rounded border border-tavern-border object-contain" />
+                  <img src={imagePreview} alt="Preview" className="max-h-28 rounded border border-[#3a2010] object-contain" />
                   <button type="button" onClick={() => { setImageFile(null); setImagePreview(null); }}
                     className="absolute top-1 right-1 bg-black/70 rounded-full p-0.5 text-white hover:bg-black/90">
                     <X size={11} />
@@ -994,13 +1058,13 @@ export default function PlayByPostPage() {
               )}
               <div className="flex items-center justify-between gap-2">
                 <button type="button" onClick={() => imageInputRef.current?.click()}
-                  className="flex items-center gap-1.5 text-xs text-tavern-muted hover:text-tavern-gold border border-tavern-border rounded px-2 py-1 transition-colors">
-                  <ImageIcon size={12} /> Image
+                  className="flex items-center gap-1.5 text-xs text-tavern-muted hover:text-tavern-gold border border-[#3a2010] rounded px-2.5 py-1.5 transition-colors bg-[#0d0703]">
+                  <ImageIcon size={12} /> Attach Image
                 </button>
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
                 <button type="submit" disabled={posting || (!content.trim() && !imageFile)}
-                  className="btn-primary text-sm py-1.5 px-4 flex items-center gap-1.5 disabled:opacity-50">
-                  <Send size={13} /> {posting ? 'Posting...' : 'Post'}
+                  className="btn-primary text-sm py-1.5 px-5 flex items-center gap-1.5 disabled:opacity-40">
+                  <Send size={13} /> {posting ? 'Posting…' : 'Post'}
                 </button>
               </div>
             </form>
@@ -1008,9 +1072,9 @@ export default function PlayByPostPage() {
 
           {/* Closed session notice */}
           {viewSession && !canPost && (
-            <div className="tavern-card p-3 flex items-center justify-between gap-3">
-              <p className="text-sm text-tavern-muted font-serif italic flex items-center gap-2">
-                <Lock size={13} />
+            <div className="shrink-0 border-t-2 border-[#2a1808] bg-[#0f0804] px-4 py-3 flex items-center justify-between gap-3">
+              <p className="text-sm text-tavern-muted/70 font-serif italic flex items-center gap-2">
+                <Lock size={13} className="text-tavern-muted/40" />
                 {isDM ? `"${viewSession.name}" is closed.` : 'This session is closed. Await the next chapter.'}
               </p>
               {isDM && (
@@ -1023,12 +1087,12 @@ export default function PlayByPostPage() {
           )}
         </div>
 
-        {/* ── Right sidebar ── */}
-        <div className="w-72 shrink-0 hidden lg:flex lg:flex-col gap-3">
+        {/* ── Right sidebar ── distinctly darker than feed ── */}
+        {sidebarOpen && (
+          <div className="w-80 shrink-0 flex flex-col border-l border-[#2a1808] h-full overflow-hidden" style={{ background: '#0c0704' }}>
 
-          {/* Tab bar */}
-          <div className="tavern-card overflow-hidden">
-            <div className="flex border-b border-tavern-border">
+            {/* Tab bar */}
+            <div className="flex border-b border-[#2a1808] shrink-0 bg-[#0a0503]">
               {([
                 { key: 'party',    icon: Users,    label: 'Party'    },
                 { key: 'dice',     icon: Dices,    label: 'Dice'     },
@@ -1036,20 +1100,19 @@ export default function PlayByPostPage() {
               ] as const).map(({ key, icon: Icon, label }) => (
                 <button key={key} onClick={() => setSideTab(key)}
                   className={clsx(
-                    'flex-1 flex flex-col items-center gap-0.5 py-2 text-[10px] uppercase tracking-widest font-serif transition-colors',
+                    'flex-1 flex flex-col items-center gap-1 py-3 text-[10px] uppercase tracking-widest font-serif transition-colors',
                     sideTab === key
-                      ? 'text-tavern-gold border-b-2 border-tavern-gold -mb-px bg-tavern-gold/5'
-                      : 'text-tavern-muted hover:text-tavern-text',
+                      ? 'text-tavern-gold bg-[#1e1100] border-b-2 border-tavern-gold -mb-px'
+                      : 'text-tavern-muted/60 hover:text-tavern-muted hover:bg-[#0f0805]',
                   )}>
-                  <Icon size={13} />
+                  <Icon size={14} />
                   {label}
                 </button>
               ))}
             </div>
 
-            {/* Tab content */}
-            <div className="p-3 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
-
+            {/* Tab content — scrollable */}
+            <div className="flex-1 overflow-y-auto p-3 bg-[#0c0704]">
               {sideTab === 'party' && (
                 <PbpPartyPanel
                   gameId={gameId!}
@@ -1067,7 +1130,7 @@ export default function PlayByPostPage() {
               {sideTab === 'dice' && (
                 <div className="space-y-3">
                   {!viewSession || viewSession.status === 'closed' ? (
-                    <p className="text-xs text-tavern-muted italic text-center py-4">
+                    <p className="text-xs text-tavern-muted italic text-center py-6">
                       {!viewSession ? 'No active session.' : 'Session is closed. No rolling until a new session begins.'}
                     </p>
                   ) : (
@@ -1084,17 +1147,17 @@ export default function PlayByPostPage() {
               {sideTab === 'handouts' && (
                 <div className="space-y-3">
                   {handouts.length === 0 ? (
-                    <p className="text-xs text-tavern-muted italic text-center py-4">
+                    <p className="text-xs text-tavern-muted italic text-center py-6">
                       {isDM ? 'No handouts yet. Create them in the game lobby.' : 'No handouts shared with you yet.'}
                     </p>
                   ) : (
                     handouts.map((h: any) => (
-                      <div key={h.id} className="border-b border-tavern-border/30 last:border-0 pb-2 last:pb-0">
-                        <p className="text-xs font-serif text-tavern-text">{h.title}</p>
-                        {h.content && <p className="text-xs text-tavern-muted/80 mt-0.5 leading-snug line-clamp-4">{h.content}</p>}
+                      <div key={h.id} className="border-b border-tavern-border/30 last:border-0 pb-3 last:pb-0">
+                        <p className="text-sm font-serif text-tavern-text">{h.title}</p>
+                        {h.content && <p className="text-xs text-tavern-muted/80 mt-1 leading-relaxed line-clamp-5">{h.content}</p>}
                         {h.file_url && (
                           <a href={h.file_url} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-tavern-gold hover:underline mt-1">
+                            className="flex items-center gap-1 text-xs text-tavern-gold hover:underline mt-1.5">
                             <File size={10} /> View attachment
                           </a>
                         )}
@@ -1104,32 +1167,30 @@ export default function PlayByPostPage() {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Session info */}
-          {viewSession && (
-            <div className="tavern-card p-3">
-              <p className="text-xs text-tavern-muted/60 uppercase tracking-widest font-serif mb-1">Session</p>
-              <p className="text-sm font-serif text-tavern-text">{viewSession.name}</p>
-              <p className="text-xs text-tavern-muted mt-0.5">
-                {new Date(viewSession.created_at * 1000).toLocaleDateString()}
-                {' · '}
-                <span className={viewSession.status === 'active' ? 'text-green-400' : 'text-tavern-muted'}>
-                  {viewSession.status}
-                </span>
-              </p>
-              <p className="text-xs text-tavern-muted/60 mt-1">{posts.length} post{posts.length !== 1 ? 's' : ''}</p>
+            {/* Footer: session info + refresh */}
+            <div className="shrink-0 border-t border-[#2a1808] px-3 py-2.5 flex items-center justify-between gap-2 bg-[#09060380]">
+              {viewSession ? (
+                <div className="min-w-0">
+                  <p className="text-xs font-serif text-tavern-text/80 truncate">{viewSession.name}</p>
+                  <p className="text-[10px] text-tavern-muted/60">
+                    {posts.length} post{posts.length !== 1 ? 's' : ''} ·{' '}
+                    <span className={viewSession.status === 'active' ? 'text-green-400/80' : 'text-tavern-muted/50'}>
+                      {viewSession.status}
+                    </span>
+                  </p>
+                </div>
+              ) : (
+                <span className="text-xs text-tavern-muted/50 italic">No session</span>
+              )}
+              <button
+                onClick={() => api.get(`/games/${gameId}/party`).then(({ data }) => setPartyMembers(data))}
+                className="text-tavern-muted/50 hover:text-tavern-muted transition-colors shrink-0" title="Refresh party">
+                <RefreshCw size={12} />
+              </button>
             </div>
-          )}
-
-          {/* Refresh party button */}
-          <button
-            onClick={() => api.get(`/games/${gameId}/party`).then(({ data }) => setPartyMembers(data))}
-            className="flex items-center gap-1.5 text-xs text-tavern-muted hover:text-tavern-text border border-tavern-border rounded px-3 py-1.5 transition-colors self-end"
-          >
-            <RefreshCw size={11} /> Refresh Party
-          </button>
-        </div>
+          </div>
+        )}
       </div>
 
       {/* New session modal */}

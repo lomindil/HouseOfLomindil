@@ -236,10 +236,17 @@ export default function PbpDiceRoller({ onRoll, canRoll, remainingRolls, rollLab
 
     if (phaseTimer.current) clearTimeout(phaseTimer.current);
     setPhase('tumbling');
-    phaseTimer.current = setTimeout(() => {
-      setPhase('landing');
-      phaseTimer.current = setTimeout(() => setPhase('idle'), 700);
-    }, 950);
+
+    // Wait for the full animation (tumbling → landing → idle) before publishing
+    await new Promise<void>(resolve => {
+      phaseTimer.current = setTimeout(() => {
+        setPhase('landing');
+        phaseTimer.current = setTimeout(() => {
+          setPhase('idle');
+          resolve();
+        }, 700);
+      }, 950);
+    });
 
     setSubmitting(true);
     try {
