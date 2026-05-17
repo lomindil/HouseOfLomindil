@@ -26,6 +26,7 @@ export default function LoginPage() {
 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState('');
 
   const { setAuth } = useAuthStore();
   const navigate = useNavigate();
@@ -45,6 +46,7 @@ export default function LoginPage() {
   // ── Sign In ──────────────────────────────────────────────────────────────────
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
+    setLoginError('');
     setLoading(true);
     try {
       const { data } = await api.post('/auth/login', { identifier: identifier.trim(), password });
@@ -53,9 +55,8 @@ export default function LoginPage() {
       navigate(redirect);
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Sign in failed';
-      toast.error(msg);
+      setLoginError(msg);
       if (err.response?.data?.noPassword) {
-        // Guide them to register to set a password
         setRegEmail(identifier.includes('@') ? identifier : '');
         switchMode('register');
       }
@@ -204,7 +205,18 @@ export default function LoginPage() {
                   </button>
                 </div>
               </div>
-              <button type="submit" disabled={loading} className="btn-primary w-full">
+              {loginError && (
+                <div className="flex items-start gap-2 bg-red-950/40 border border-red-900/60 rounded-md px-3 py-2.5">
+                  <span className="text-red-400 text-lg leading-none mt-0.5">⚠</span>
+                  <p className="text-sm text-red-300 leading-snug">{loginError}</p>
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={loading}
+                onClick={() => setLoginError('')}
+                className="btn-primary w-full"
+              >
                 {loading ? 'Signing in...' : 'Enter the Tavern'}
               </button>
               <p className="text-xs text-tavern-muted text-center">

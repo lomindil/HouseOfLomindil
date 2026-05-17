@@ -337,8 +337,8 @@ router.get('/:id/invite-list', (req: AuthRequest, res: Response) => {
   res.json({ players, army });
 });
 
-// POST /:id/send-invites — send PBP invitation emails (DM only)
-router.post('/:id/send-invites', async (req: AuthRequest, res: Response) => {
+// POST /:id/send-invites — queue PBP invitation emails (DM only); responds immediately
+router.post('/:id/send-invites', (req: AuthRequest, res: Response) => {
   const game = db.prepare('SELECT * FROM games WHERE id = ? AND dm_id = ?').get(req.params.id, req.user!.id) as any;
   if (!game) return res.status(403).json({ error: 'DM only' });
 
@@ -346,12 +346,29 @@ router.post('/:id/send-invites', async (req: AuthRequest, res: Response) => {
   if (!Array.isArray(recipients) || recipients.length === 0) return res.status(400).json({ error: 'No recipients' });
 
   const gameUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/games/${req.params.id}/pbp`;
-  let sent = 0;
-  for (const r of recipients as { name: string; email: string }[]) {
-    if (!r.email) continue;
-    try { await sendPbpInvite(r.email, r.name || r.email, game.name, gameUrl, game.join_code); sent++; } catch {}
+  const toSend = (recipients as { name: string; email: string }[]).filter(r => !!r.email);
+
+  // Respond immediately — do not block on email delivery
+  res.json({ sent: toSend.length });
+
+  // Fire and forget — log failures but don't surface them to the client
+  for (const r of toSend) {
+    sendPbpInvite(r.email, r.name || r.email, game.name, gameUrl, game.join_code)
+      .catch(err => console.error('[mailer] invite failed →', r.email, err?.message));
   }
-  res.json({ sent });
+});
+
+// POST /:id/regenerate-code — DM generates a new join code
+router.post('/:id/regenerate-code', (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT dm_id FROM games WHERE id = ?').get(req.params.id) as any;
+  if (!game || game.dm_id !== req.user!.id) return res.status(403).json({ error: 'DM only' });
+
+  let newCode = generateJoinCode();
+  while (db.prepare('SELECT id FROM games WHERE join_code = ?').get(newCode)) {
+    newCode = generateJoinCode();
+  }
+  db.prepare('UPDATE games SET join_code = ? WHERE id = ?').run(newCode, req.params.id);
+  res.json({ join_code: newCode });
 });
 
 // DELETE /:id/leave — player voluntarily leaves the campaign

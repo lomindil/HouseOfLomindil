@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/auth';
 import {
   Play, Copy, Users, Map, Plus, Trash2, Upload, BookOpen, Hammer,
   Pencil, Skull, Swords, History, X, Camera, ChevronDown, ChevronUp,
-  Library, Download, ScrollText, LogOut, UserMinus,
+  Library, Download, ScrollText, LogOut, UserMinus, RefreshCw,
 } from 'lucide-react';
 import MapBuilderModal from '../components/map/MapBuilderModal';
 import GameCharacterModal from '../components/game/GameCharacterModal';
@@ -509,14 +509,32 @@ export default function GameLobbyPage() {
             </div>
             <div className="flex items-center gap-2 mb-2">
               <span className="font-serif text-3xl tracking-widest text-tavern-text font-bold">{game.join_code}</span>
-              <button onClick={copyCode} className="text-tavern-muted hover:text-tavern-gold p-1"><Copy size={16} /></button>
+              <button onClick={copyCode} title="Copy code" className="text-tavern-muted hover:text-tavern-gold p-1"><Copy size={16} /></button>
             </div>
             <p className="text-xs text-tavern-muted mb-3">
               Players use this code to join live sessions <em>and</em> Play by Post.
             </p>
-            <button onClick={copyJoinLink} className="btn-secondary w-full text-xs py-1.5 flex items-center justify-center gap-1">
-              <Copy size={12} /> Copy Join Link
-            </button>
+            <div className="flex gap-2">
+              <button onClick={copyJoinLink} className="btn-secondary flex-1 text-xs py-1.5 flex items-center justify-center gap-1">
+                <Copy size={12} /> Copy Join Link
+              </button>
+              <button
+                onClick={async () => {
+                  if (!confirm('Generate a new join code? The old code will stop working immediately.')) return;
+                  try {
+                    const { data } = await api.post(`/games/${game.id}/regenerate-code`);
+                    setGame((g: any) => ({ ...g, join_code: data.join_code }));
+                    toast.success('New join code generated');
+                  } catch {
+                    toast.error('Failed to regenerate code');
+                  }
+                }}
+                title="Generate new join code"
+                className="border border-tavern-border text-tavern-muted hover:text-tavern-gold hover:border-tavern-gold/50 rounded-md px-2.5 py-1.5 transition-colors text-xs flex items-center gap-1"
+              >
+                <RefreshCw size={12} /> New Code
+              </button>
+            </div>
           </div>}
 
           {/* Players */}
