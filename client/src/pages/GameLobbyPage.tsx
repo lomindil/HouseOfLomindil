@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/auth';
 import {
   Play, Copy, Users, Map, Plus, Trash2, Upload, BookOpen, Hammer,
   Pencil, Skull, Swords, History, X, Camera, ChevronDown, ChevronUp,
-  Library, Download, ScrollText,
+  Library, Download, ScrollText, LogOut, UserMinus,
 } from 'lucide-react';
 import MapBuilderModal from '../components/map/MapBuilderModal';
 import GameCharacterModal from '../components/game/GameCharacterModal';
@@ -33,6 +33,103 @@ function Section({ title, icon, children, defaultOpen = true }: { title: string;
         {open ? <ChevronUp size={14} className="text-tavern-muted" /> : <ChevronDown size={14} className="text-tavern-muted" />}
       </button>
       {open && <div className="px-4 pb-4">{children}</div>}
+    </div>
+  );
+}
+
+function PlayerRow({ player, isDM, isSelf, gameId, onKicked }: {
+  player: any; isDM: boolean; isSelf: boolean; gameId: string; onKicked: () => void;
+}) {
+  const [confirmKick, setConfirmKick] = useState(false);
+  const [kicking, setKicking] = useState(false);
+
+  async function kick() {
+    setKicking(true);
+    try {
+      await api.delete(`/games/${gameId}/players/${player.id}`);
+      toast.success(`${player.username} removed from campaign`);
+      onKicked();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to remove player');
+    } finally {
+      setKicking(false);
+      setConfirmKick(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 group">
+      <div className="w-7 h-7 rounded-full bg-tavern-bg border border-tavern-border overflow-hidden flex-shrink-0">
+        {player.avatar_url
+          ? <img src={player.avatar_url} alt="" className="w-full h-full object-cover" />
+          : <span className="text-xs flex items-center justify-center h-full">👤</span>}
+      </div>
+      <div className="flex-1 min-w-0">
+        <span className="text-sm text-tavern-text">{player.username}</span>
+        {isSelf && <span className="text-[10px] text-tavern-gold/60 ml-1">(you)</span>}
+        {player.char_name && <span className="text-xs text-tavern-muted ml-1">· {player.char_name}</span>}
+      </div>
+      {isDM && !isSelf && (
+        confirmKick ? (
+          <div className="flex items-center gap-1 text-xs">
+            <span className="text-tavern-muted/60">Kick?</span>
+            <button onClick={kick} disabled={kicking}
+              className="text-red-400 hover:text-red-300 font-semibold px-1">
+              {kicking ? '…' : 'Yes'}
+            </button>
+            <button onClick={() => setConfirmKick(false)} className="text-tavern-muted hover:text-tavern-text px-1">No</button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmKick(true)}
+            title={`Remove ${player.username}`}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-tavern-muted/50 hover:text-red-400 p-1 rounded"
+          >
+            <UserMinus size={13} />
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+function LeaveButton({ gameId }: { gameId: string }) {
+  const navigate = useNavigate();
+  const [confirm, setConfirm] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  async function leave() {
+    setLeaving(true);
+    try {
+      await api.delete(`/games/${gameId}/leave`);
+      toast.success('You have left the campaign');
+      navigate('/');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || 'Failed to leave');
+      setLeaving(false);
+      setConfirm(false);
+    }
+  }
+
+  if (!confirm) {
+    return (
+      <button
+        onClick={() => setConfirm(true)}
+        className="flex items-center gap-1.5 text-xs text-tavern-muted/60 hover:text-red-400 transition-colors"
+      >
+        <LogOut size={12} /> Leave Campaign
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-tavern-muted/70">Leave this campaign?</span>
+      <button onClick={leave} disabled={leaving}
+        className="text-red-400 hover:text-red-300 font-semibold">
+        {leaving ? 'Leaving…' : 'Yes, leave'}
+      </button>
+      <button onClick={() => setConfirm(false)} className="text-tavern-muted hover:text-tavern-text">Cancel</button>
     </div>
   );
 }
@@ -424,20 +521,28 @@ export default function GameLobbyPage() {
 
           {/* Players */}
           <div className="tavern-card p-4">
-            <div className="flex items-center gap-2 mb-3"><Users size={16} className="text-tavern-gold" /><h2 className="font-serif text-tavern-gold text-sm uppercase tracking-widest">Players</h2></div>
+            <div className="flex items-center gap-2 mb-3">
+              <Users size={16} className="text-tavern-gold" />
+              <h2 className="font-serif text-tavern-gold text-sm uppercase tracking-widest">Players</h2>
+            </div>
             {game.players.length === 0 ? <p className="text-tavern-muted text-sm">No players yet</p> : (
               <div className="space-y-2">
                 {game.players.map(p => (
-                  <div key={p.id} className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-tavern-bg border border-tavern-border overflow-hidden flex-shrink-0">
-                      {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" /> : <span className="text-xs flex items-center justify-center h-full">👤</span>}
-                    </div>
-                    <div>
-                      <span className="text-sm text-tavern-text">{p.username}</span>
-                      {p.char_name && <span className="text-xs text-tavern-muted ml-1">({p.char_name})</span>}
-                    </div>
-                  </div>
+                  <PlayerRow
+                    key={p.id}
+                    player={p}
+                    isDM={isDM}
+                    isSelf={p.id === user?.id}
+                    gameId={game.id}
+                    onKicked={() => setGame((g: any) => ({ ...g, players: g.players.filter((pl: any) => pl.id !== p.id) }))}
+                  />
                 ))}
+              </div>
+            )}
+            {/* Leave button for non-DM players */}
+            {!isDM && (
+              <div className="mt-3 pt-3 border-t border-tavern-border/40">
+                <LeaveButton gameId={game.id} />
               </div>
             )}
           </div>

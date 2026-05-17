@@ -354,6 +354,24 @@ router.post('/:id/send-invites', async (req: AuthRequest, res: Response) => {
   res.json({ sent });
 });
 
+// DELETE /:id/leave — player voluntarily leaves the campaign
+router.delete('/:id/leave', (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT * FROM games WHERE id = ?').get(req.params.id) as any;
+  if (!game) return res.status(404).json({ error: 'Not found' });
+  if (game.dm_id === req.user!.id) return res.status(400).json({ error: 'DM cannot leave their own campaign' });
+  db.prepare('DELETE FROM game_players WHERE game_id = ? AND user_id = ?').run(req.params.id, req.user!.id);
+  res.json({ ok: true });
+});
+
+// DELETE /:id/players/:userId — DM kicks a player
+router.delete('/:id/players/:userId', (req: AuthRequest, res: Response) => {
+  const game = db.prepare('SELECT dm_id FROM games WHERE id = ?').get(req.params.id) as any;
+  if (!game || game.dm_id !== req.user!.id) return res.status(403).json({ error: 'DM only' });
+  if (req.params.userId === req.user!.id) return res.status(400).json({ error: 'Cannot kick yourself' });
+  db.prepare('DELETE FROM game_players WHERE game_id = ? AND user_id = ?').run(req.params.id, req.params.userId);
+  res.json({ ok: true });
+});
+
 router.put('/:id', (req: AuthRequest, res: Response) => {
   const game = db.prepare('SELECT * FROM games WHERE id = ? AND dm_id = ?').get(req.params.id, req.user!.id) as any;
   if (!game) return res.status(403).json({ error: 'Not authorized' });
